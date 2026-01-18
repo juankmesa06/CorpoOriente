@@ -1,0 +1,22 @@
+project_id = "afkkobuobbufozbmypro"
+
+[functions.appointments]
+verify_jwt = false
+
+[functions.reminder-cron]
+verify_jwt = false
+
+[functions.reminder-response]
+verify_jwt = false
+
+[functions.payments]
+verify_jwt = false
+
+[functions.reports]
+verify_jwt = false
+
+[functions.surveys]
+verify_jwt = false
+
+[functions.medical-records]
+verify_jwt = false
