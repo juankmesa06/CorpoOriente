@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 }
 
 // Horario de atención: 7:00 AM - 9:00 PM
@@ -33,7 +34,7 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    
+
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Token inválido' }), {
         status: 401,
@@ -77,7 +78,7 @@ serve(async (req) => {
       for (let hour = WORKING_HOURS.start; hour < WORKING_HOURS.end; hour++) {
         const slotStart = new Date(date)
         slotStart.setHours(hour, 0, 0, 0)
-        
+
         // No mostrar slots pasados
         if (slotStart <= now) continue
 
@@ -108,8 +109,8 @@ serve(async (req) => {
 
       // Validaciones básicas
       if (!doctor_id || !patient_id || !start_time) {
-        return new Response(JSON.stringify({ 
-          error: 'doctor_id, patient_id y start_time son requeridos' 
+        return new Response(JSON.stringify({
+          error: 'doctor_id, patient_id y start_time son requeridos'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -118,8 +119,8 @@ serve(async (req) => {
 
       // Cita presencial REQUIERE consultorio
       if (!is_virtual && !room_id) {
-        return new Response(JSON.stringify({ 
-          error: 'Las citas presenciales requieren un consultorio asignado' 
+        return new Response(JSON.stringify({
+          error: 'Las citas presenciales requieren un consultorio asignado'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -133,8 +134,8 @@ serve(async (req) => {
       // 1. Validar horario de atención (7am - 9pm)
       const hour = startDate.getHours()
       if (hour < WORKING_HOURS.start || hour >= WORKING_HOURS.end) {
-        return new Response(JSON.stringify({ 
-          error: `Horario fuera de atención. Horario: ${WORKING_HOURS.start}:00 - ${WORKING_HOURS.end}:00` 
+        return new Response(JSON.stringify({
+          error: `Horario fuera de atención. Horario: ${WORKING_HOURS.start}:00 - ${WORKING_HOURS.end}:00`
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -143,8 +144,8 @@ serve(async (req) => {
 
       // 2. Validar que la cita no sea en el pasado
       if (startDate <= new Date()) {
-        return new Response(JSON.stringify({ 
-          error: 'No se pueden crear citas en el pasado' 
+        return new Response(JSON.stringify({
+          error: 'No se pueden crear citas en el pasado'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -159,8 +160,8 @@ serve(async (req) => {
         })
 
       if (!relationship) {
-        return new Response(JSON.stringify({ 
-          error: 'El paciente solo puede reservar con su médico asignado' 
+        return new Response(JSON.stringify({
+          error: 'El paciente solo puede reservar con su médico asignado'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -176,8 +177,8 @@ serve(async (req) => {
         })
 
       if (!isDoctorAvailable) {
-        return new Response(JSON.stringify({ 
-          error: 'El horario seleccionado no está disponible para el médico' 
+        return new Response(JSON.stringify({
+          error: 'El horario seleccionado no está disponible para el médico'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -194,8 +195,8 @@ serve(async (req) => {
           })
 
         if (!isRoomAvailable) {
-          return new Response(JSON.stringify({ 
-            error: 'El consultorio seleccionado no está disponible en ese horario' 
+          return new Response(JSON.stringify({
+            error: 'El consultorio seleccionado no está disponible en ese horario'
           }), {
             status: 400,
             headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -266,8 +267,8 @@ serve(async (req) => {
       const hoursUntilAppointment = (appointmentStart.getTime() - now.getTime()) / (1000 * 60 * 60)
 
       if (hoursUntilAppointment < MIN_CANCELLATION_HOURS) {
-        return new Response(JSON.stringify({ 
-          error: `Cancelación solo permitida con ${MIN_CANCELLATION_HOURS} horas de anticipación` 
+        return new Response(JSON.stringify({
+          error: `Cancelación solo permitida con ${MIN_CANCELLATION_HOURS} horas de anticipación`
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -299,7 +300,7 @@ serve(async (req) => {
       })
 
       console.log('Cita cancelada:', appointment_id, 'Crédito:', creditResult)
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         success: true,
         credit_info: creditResult
       }), {
@@ -325,7 +326,7 @@ serve(async (req) => {
       })
 
       if (paymentStatus !== 'paid') {
-        return new Response(JSON.stringify({ 
+        return new Response(JSON.stringify({
           error: 'La cita no puede confirmarse sin pago completado',
           payment_status: paymentStatus
         }), {
