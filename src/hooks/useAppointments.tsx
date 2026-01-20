@@ -47,23 +47,25 @@ export const useAppointments = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No autenticado');
 
-      const response = await supabase.functions.invoke('appointments', {
-        body: null,
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      console.log('Fetching availability for:', { doctorId, date });
 
-      // Hacer GET request manual para availability
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/appointments?action=availability&doctor_id=${doctorId}&date=${date}`;
-      const res = await fetch(url, {
+      // Correctly use invoke with query parameters in the function name
+      const { data, error } = await supabase.functions.invoke(`appointments?action=availability&doctor_id=${doctorId}&date=${date}`, {
+        method: 'GET',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+          Authorization: `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
         }
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
+      if (error) {
+        console.error('Invoke error:', error);
+        throw error;
+      }
+
+      // If the function returns an error object inside data
+      if (data && data.error) throw new Error(data.error);
+
       setSlots(data.slots || []);
       return data.slots;
     } catch (error: any) {
@@ -88,26 +90,28 @@ export const useAppointments = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No autenticado');
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/appointments?action=create`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      // Use invoke for POST
+      const { data, error } = await supabase.functions.invoke('appointments?action=create', {
+        body: {
           doctor_id: doctorId,
           patient_id: patientId,
           start_time: startTime,
           is_virtual: isVirtual,
           room_id: roomId,
           notes
-        })
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
+        }
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (error) {
+        console.error('Invoke create error:', error);
+        throw error;
+      }
+
+      if (data && data.error) throw new Error(data.error);
 
       toast.success('Cita creada exitosamente');
       return data.appointment;
@@ -126,22 +130,19 @@ export const useAppointments = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No autenticado');
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/appointments?action=cancel`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const { data, error } = await supabase.functions.invoke('appointments?action=cancel', {
+        body: {
           appointment_id: appointmentId,
           reason
-        })
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
+        }
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (error) throw error;
+      if (data && data.error) throw new Error(data.error);
 
       toast.success('Cita cancelada exitosamente');
       return true;

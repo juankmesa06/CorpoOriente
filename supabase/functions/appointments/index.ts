@@ -26,7 +26,8 @@ serve(async (req) => {
     // Verificar autenticación
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'No autorizado' }), {
+      console.error('Missing Authorization header')
+      return new Response(JSON.stringify({ error: 'Falta encabezado de autorización' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
@@ -36,7 +37,11 @@ serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
 
     if (authError || !user) {
-      return new Response(JSON.stringify({ error: 'Token inválido' }), {
+      console.error('Auth error:', authError)
+      return new Response(JSON.stringify({
+        error: 'Token inválido o expirado',
+        details: authError?.message
+      }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })

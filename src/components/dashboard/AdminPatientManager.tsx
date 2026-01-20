@@ -7,25 +7,19 @@ import { Users, Loader2, Video, MapPin, DollarSign } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-interface PatientAppointment {
+interface AdminAppointmentView {
     id: string;
     start_time: string;
     is_virtual: boolean;
     status: string;
-    patient_profiles: {
-        profiles: {
-            full_name: string;
-            email: string;
-        } | null;
-    } | null;
-    payments: {
-        amount: number;
-        status: string;
-    }[];
+    patient_name: string;
+    patient_email: string;
+    payment_amount: number | null;
+    payment_status: string | null;
 }
 
 export const AdminPatientManager = () => {
-    const [appointments, setAppointments] = useState<PatientAppointment[]>([]);
+    const [appointments, setAppointments] = useState<AdminAppointmentView[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -34,31 +28,17 @@ export const AdminPatientManager = () => {
 
     const fetchAppointments = async () => {
         try {
+            // Using the new view for simpler data access
             const { data, error } = await supabase
-                .from('appointments')
-                .select(`
-                    id,
-                    start_time,
-                    is_virtual,
-                    status,
-                    patient_profiles (
-                        profiles (
-                            full_name,
-                            email
-                        )
-                    ),
-                    payments (
-                        amount,
-                        status
-                    )
-                `)
+                .from('admin_appointments_view')
+                .select('*')
                 .order('start_time', { ascending: false })
                 .limit(50);
 
             if (error) throw error;
 
             console.log('Appointments data:', data);
-            setAppointments(data as any || []);
+            setAppointments(data || []);
         } catch (error) {
             console.error('Error fetching appointments:', error);
         } finally {
@@ -71,11 +51,13 @@ export const AdminPatientManager = () => {
             case 'completed': return <Badge className="bg-green-500">Completada</Badge>;
             case 'pending': return <Badge variant="outline" className="text-yellow-600 border-yellow-600">Pendiente</Badge>;
             case 'cancelled': return <Badge variant="destructive">Cancelada</Badge>;
+            case 'confirmed': return <Badge className="bg-blue-500">Confirmada</Badge>;
             default: return <Badge variant="secondary">{status}</Badge>;
         }
     };
 
-    const formatCurrency = (amount: number) => {
+    const formatCurrency = (amount: number | null) => {
+        if (amount === null) return '$0 COP';
         return new Intl.NumberFormat('es-CO', {
             style: 'currency',
             currency: 'COP',
@@ -116,56 +98,50 @@ export const AdminPatientManager = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {appointments.map((apt) => {
-                                    const patientName = apt.patient_profiles?.profiles?.full_name || 'Desconocido';
-                                    const patientEmail = apt.patient_profiles?.profiles?.email || '';
-                                    const payment = apt.payments?.[0]; // Assuming 1 payment per appointment
-
-                                    return (
-                                        <TableRow key={apt.id}>
-                                            <TableCell>
-                                                <div className="font-medium">{patientName}</div>
-                                                <div className="text-xs text-muted-foreground">{patientEmail}</div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {format(new Date(apt.start_time), "d MMM yyyy, h:mm a", { locale: es })}
-                                            </TableCell>
-                                            <TableCell>
-                                                <div className="flex items-center gap-2">
-                                                    {apt.is_virtual ? (
-                                                        <>
-                                                            <Video className="h-4 w-4 text-primary" />
-                                                            <span className="text-sm">Virtual</span>
-                                                        </>
-                                                    ) : (
-                                                        <>
-                                                            <MapPin className="h-4 w-4 text-green-600" />
-                                                            <span className="text-sm">Presencial</span>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {getStatusBadge(apt.status)}
-                                            </TableCell>
-                                            <TableCell>
-                                                {payment ? (
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-green-700 flex items-center gap-1">
-                                                            <DollarSign className="h-3 w-3" />
-                                                            {formatCurrency(payment.amount)}
-                                                        </span>
-                                                        <span className="text-xs text-muted-foreground capitalize">
-                                                            {payment.status}
-                                                        </span>
-                                                    </div>
+                                {appointments.map((apt) => (
+                                    <TableRow key={apt.id}>
+                                        <TableCell>
+                                            <div className="font-medium">{apt.patient_name || 'Desconocido'}</div>
+                                            <div className="text-xs text-muted-foreground">{apt.patient_email || 'Sin email'}</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {format(new Date(apt.start_time), "d MMM yyyy, h:mm a", { locale: es })}
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex items-center gap-2">
+                                                {apt.is_virtual ? (
+                                                    <>
+                                                        <Video className="h-4 w-4 text-primary" />
+                                                        <span className="text-sm">Virtual</span>
+                                                    </>
                                                 ) : (
-                                                    <span className="text-xs text-muted-foreground italic">Sin pago</span>
+                                                    <>
+                                                        <MapPin className="h-4 w-4 text-green-600" />
+                                                        <span className="text-sm">Presencial</span>
+                                                    </>
                                                 )}
-                                            </TableCell>
-                                        </TableRow>
-                                    );
-                                })}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            {getStatusBadge(apt.status)}
+                                        </TableCell>
+                                        <TableCell>
+                                            {apt.payment_amount ? (
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-green-700 flex items-center gap-1">
+                                                        <DollarSign className="h-3 w-3" />
+                                                        {formatCurrency(apt.payment_amount)}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground capitalize">
+                                                        {apt.payment_status}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-muted-foreground italic">Sin pago</span>
+                                            )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
                             </TableBody>
                         </Table>
                     </div>
