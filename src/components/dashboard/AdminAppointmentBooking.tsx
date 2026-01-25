@@ -1,0 +1,507 @@
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import {
+    DollarSign, CheckCircle2, Clock, AlertCircle, Calendar as CalendarIcon,
+    User, List, PlusCircle, Stethoscope, Check, ChevronsUpDown, Loader2
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import {
+    Command,
+    CommandEmpty,
+    CommandGroup,
+    CommandInput,
+    CommandItem,
+    CommandList,
+} from "@/components/ui/command";
+
+export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
+    const [patients, setPatients] = useState<any[]>([]);
+    const [doctors, setDoctors] = useState<any[]>([]);
+    const [selectedPatientId, setSelectedPatientId] = useState<string>("");
+    const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
+    const [date, setDate] = useState<Date | undefined>(undefined);
+    const [time, setTime] = useState<string>("");
+    const [isVirtual, setIsVirtual] = useState(false);
+    const [notes, setNotes] = useState("");
+    const [loading, setLoading] = useState(false);
+    const [checkingAvailability, setCheckingAvailability] = useState(false);
+    const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+    const [appointmentsList, setAppointmentsList] = useState<any[]>([]);
+    const [fetchingAppointments, setFetchingAppointments] = useState(false);
+    const [typeFilter, setTypeFilter] = useState<string>("all");
+
+    useEffect(() => {
+        const loadData = async () => {
+            const { data: patientsData } = await supabase
+                .from('patient_profiles')
+                .select('id, user_id, profiles(full_name, email)')
+                .order('created_at', { ascending: false });
+
+            if (patientsData) {
+                setPatients(patientsData.map(p => ({
+                    id: p.id,
+                    label: p.profiles?.full_name || 'Sin nombre',
+                    email: p.profiles?.email
+                })));
+            }
+
+            const { data: doctorsData, error: doctorsError } = await supabase
+                .from('doctor_profiles')
+                .select('id, profiles!doctor_profiles_user_id_fkey(full_name), specialty')
+                .order('created_at', { ascending: false });
+
+            if (doctorsError) {
+                console.error('Doctors Error:', doctorsError);
+                toast.error(`Error cargando doctores: ${doctorsError.message}`);
+            }
+
+            if (doctorsData) {
+                setDoctors(doctorsData.map(d => ({
+                    id: d.id,
+                    label: `Dr. ${d.profiles?.full_name} - ${d.specialty}`
+                })));
+            }
+
+            fetchAppointments();
+        };
+        loadData();
+    }, []);
+
+    const fetchAppointments = async () => {
+        setFetchingAppointments(true);
+        try {
+            let query = supabase
+                .from('appointments')
+                .select(`
+                    id,
+                    start_time,
+                    status,
+                    is_virtual,
+                    patient_profiles (
+                        profiles (
+                            full_name
+                        )
+                    ),
+                    doctor_profiles (
+                        profiles:profiles!doctor_profiles_user_id_fkey (
+                            full_name
+                        )
+                    ),
+                    payments (
+                        amount,
+                        status
+                    )
+                `)
+                .order('start_time', { ascending: false })
+                .limit(30);
+
+            if (typeFilter === "virtual") query = query.eq('is_virtual', true);
+            if (typeFilter === "presencial") query = query.eq('is_virtual', false);
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+            setAppointmentsList(data || []);
+        } catch (error: any) {
+            console.error('Error fetching appointments:', error);
+            toast.error("Error al cargar citas: " + error.message);
+        } finally {
+            setFetchingAppointments(false);
+        }
+    };
+
+    const checkAvailability = async () => {
+        if (!selectedDoctorId || !date || !time) return;
+
+        setCheckingAvailability(true);
+        setIsAvailable(null);
+
+        try {
+            const [hours, minutes] = time.split(':');
+            const startTime = new Date(date);
+            startTime.setHours(parseInt(hours), parseInt(minutes), 0);
+
+            const endTime = new Date(startTime);
+            endTime.setHours(endTime.getHours() + 1);
+
+            const { data, error } = await supabase.rpc('check_doctor_availability', {
+                _doctor_id: selectedDoctorId,
+                _start_time: startTime.toISOString(),
+                _end_time: endTime.toISOString()
+            });
+
+            if (error) throw error;
+            setIsAvailable(data);
+
+            if (!data) {
+                toast.warning("El doctor ya tiene una cita en ese horario");
+            }
+
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setCheckingAvailability(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchAppointments();
+    }, [typeFilter]);
+
+    useEffect(() => {
+        checkAvailability();
+    }, [selectedDoctorId, date, time]);
+
+    const handleBooking = async () => {
+        if (!selectedPatientId || !selectedDoctorId || !date || !time) {
+            toast.error("Por favor complete todos los campos obligatorios");
+            return;
+        }
+
+        if (isAvailable === false) {
+            toast.error("El doctor no está disponible en este horario");
+            return;
+        }
+
+        setLoading(true);
+
+        try {
+            const [hours, minutes] = time.split(':');
+            const startTime = new Date(date);
+            startTime.setHours(parseInt(hours), parseInt(minutes), 0);
+
+            const endTime = new Date(startTime);
+            endTime.setHours(endTime.getHours() + 1);
+
+            const { data: apt, error: aptError } = await supabase
+                .from('appointments')
+                .insert({
+                    doctor_id: selectedDoctorId,
+                    patient_id: selectedPatientId,
+                    start_time: startTime.toISOString(),
+                    end_time: endTime.toISOString(),
+                    status: 'confirmed',
+                    is_virtual: isVirtual,
+                    notes: notes
+                })
+                .select()
+                .single();
+
+            if (aptError) throw aptError;
+
+            // Mark as paid immediately in DB for MVP flow
+            await supabase
+                .from('payments')
+                .update({ status: 'paid', paid_at: new Date().toISOString(), amount: 500 })
+                .eq('appointment_id', apt.id);
+
+            toast.success("Cita agendada y pagada exitosamente");
+
+            setNotes("");
+            setTime("");
+            setDate(undefined);
+            setSelectedPatientId("");
+            setSelectedDoctorId("");
+            fetchAppointments();
+
+        } catch (error: any) {
+            toast.error("Error al agendar: " + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'confirmed': return <Badge className="bg-green-50 text-green-700 border-green-200">Confirmada</Badge>;
+            case 'pending': return <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendiente</Badge>;
+            case 'cancelled': return <Badge variant="destructive">Cancelada</Badge>;
+            default: return <Badge variant="outline">{status}</Badge>;
+        }
+    };
+
+    const getPaymentBadge = (payment: any) => {
+        const p = payment && payment[0];
+        const amount = p ? p.amount : 500;
+
+        return (
+            <div className="flex flex-col gap-1">
+                <Badge className="bg-blue-50 text-blue-700 border-blue-200 w-fit">
+                    <CheckCircle2 className="h-3 w-3 mr-1" /> Pagado
+                </Badge>
+                <span className="text-[10px] font-bold text-slate-700">${amount.toLocaleString()}</span>
+            </div>
+        );
+    };
+
+    return (
+        <Tabs defaultValue={isSuperAdmin ? "list" : "booking"} className="w-full">
+            <div className="flex items-center justify-between mb-4">
+                <TabsList>
+                    <TabsTrigger value="list" className="flex items-center gap-2">
+                        <List className="h-4 w-4" />
+                        Listado de Citas
+                    </TabsTrigger>
+                    {!isSuperAdmin && (
+                        <TabsTrigger value="booking" className="flex items-center gap-2">
+                            <PlusCircle className="h-4 w-4" />
+                            Agendar Cita
+                        </TabsTrigger>
+                    )}
+                </TabsList>
+                <div className="flex items-center gap-4">
+                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                        <SelectTrigger className="w-[180px] h-8 bg-white">
+                            <SelectValue placeholder="Filtrar por tipo" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos los tipos</SelectItem>
+                            <SelectItem value="presencial">Presencial</SelectItem>
+                            <SelectItem value="virtual">Virtual</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" onClick={fetchAppointments} disabled={fetchingAppointments} className="h-8">
+                        <Loader2 className={cn("h-4 w-4 mr-2", fetchingAppointments && "animate-spin")} />
+                        Actualizar
+                    </Button>
+                </div>
+            </div>
+
+            <TabsContent value="list">
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Control de Citas</CardTitle>
+                        <CardDescription>Seguimiento de las consultas agendadas y su estado financiero.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Fecha / Hora</TableHead>
+                                    <TableHead>Paciente</TableHead>
+                                    <TableHead>Doctor</TableHead>
+                                    <TableHead>Estado Cita</TableHead>
+                                    <TableHead>Pago / Valor</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {fetchingAppointments ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center py-8">Cargando citas...</TableCell>
+                                    </TableRow>
+                                ) : appointmentsList.length === 0 ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No se encontraron citas</TableCell>
+                                    </TableRow>
+                                ) : (
+                                    appointmentsList.map((apt) => (
+                                        <TableRow key={apt.id}>
+                                            <TableCell className="font-medium">
+                                                <div className="flex flex-col">
+                                                    <span>{format(new Date(apt.start_time), "PPP", { locale: es })}</span>
+                                                    <span className="text-xs text-muted-foreground">{format(new Date(apt.start_time), "HH:mm")}</span>
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <User className="h-4 w-4 text-slate-400" />
+                                                    {apt.patient_profiles?.profiles?.full_name || 'Desconocido'}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <Stethoscope className="h-4 w-4 text-primary" />
+                                                    {apt.doctor_profiles?.profiles?.full_name || 'Desconocido'}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>{getStatusBadge(apt.status)}</TableCell>
+                                            <TableCell>{getPaymentBadge(apt.payments)}</TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            </TabsContent>
+
+            {!isSuperAdmin && (
+                <TabsContent value="booking">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Agendamiento de Citas</CardTitle>
+                            <CardDescription>Programe nuevas consultas para los pacientes.</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label>Paciente</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="outline" role="combobox" className="w-full justify-between">
+                                                {selectedPatientId
+                                                    ? patients.find((p) => p.id === selectedPatientId)?.label
+                                                    : "Seleccionar paciente..."}
+                                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-[300px] p-0">
+                                            <Command>
+                                                <CommandInput placeholder="Buscar paciente..." />
+                                                <CommandList>
+                                                    <CommandEmpty>No encontrado.</CommandEmpty>
+                                                    <CommandGroup>
+                                                        {patients.map((patient) => (
+                                                            <CommandItem
+                                                                key={patient.id}
+                                                                value={patient.label}
+                                                                onSelect={() => setSelectedPatientId(patient.id)}
+                                                            >
+                                                                <Check
+                                                                    className={cn(
+                                                                        "mr-2 h-4 w-4",
+                                                                        selectedPatientId === patient.id ? "opacity-100" : "opacity-0"
+                                                                    )}
+                                                                />
+                                                                <div className="flex flex-col">
+                                                                    <span>{patient.label}</span>
+                                                                    <span className="text-xs text-muted-foreground">{patient.email}</span>
+                                                                </div>
+                                                            </CommandItem>
+                                                        ))}
+                                                    </CommandGroup>
+                                                </CommandList>
+                                            </Command>
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Doctor / Especialista</Label>
+                                    <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Seleccionar doctor" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {doctors.map((doc) => (
+                                                <SelectItem key={doc.id} value={doc.id}>{doc.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2 flex flex-col">
+                                    <Label>Fecha</Label>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button
+                                                variant={"outline"}
+                                                className={cn(
+                                                    "w-full justify-start text-left font-normal",
+                                                    !date && "text-muted-foreground"
+                                                )}
+                                            >
+                                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                                {date ? format(date, "PPP", { locale: es }) : <span>Elegir fecha</span>}
+                                            </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-auto p-0">
+                                            <Calendar
+                                                mode="single"
+                                                selected={date}
+                                                onSelect={setDate}
+                                                initialFocus
+                                            />
+                                        </PopoverContent>
+                                    </Popover>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Hora (24h)</Label>
+                                    <Input
+                                        type="time"
+                                        value={time}
+                                        onChange={(e) => setTime(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {selectedDoctorId && date && time && (
+                                <div className={`p-4 rounded-lg flex items-center gap-2 ${checkingAvailability ? 'bg-muted' :
+                                    isAvailable ? 'bg-green-50 text-green-700 border border-green-200' :
+                                        'bg-red-50 text-red-700 border border-red-200'
+                                    }`}>
+                                    {checkingAvailability ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <span className="text-sm">Verificando disponibilidad...</span>
+                                        </>
+                                    ) : isAvailable ? (
+                                        <>
+                                            <Check className="h-4 w-4" />
+                                            <span className="text-sm font-medium">Doctor disponible</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <AlertCircle className="h-4 w-4" />
+                                            <span className="text-sm font-medium">Doctor ocupado en este horario</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-2">
+                                    <Label>Tipo de Cita</Label>
+                                    <Select value={isVirtual ? "virtual" : "presencial"} onValueChange={(v) => setIsVirtual(v === "virtual")}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="presencial">Presencial</SelectItem>
+                                            <SelectItem value="virtual">Virtual</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Notas</Label>
+                                    <Input
+                                        placeholder="Motivo de consulta..."
+                                        value={notes}
+                                        onChange={(e) => setNotes(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <Button
+                                className="w-full bg-primary hover:bg-primary/90"
+                                size="lg"
+                                onClick={handleBooking}
+                                disabled={loading}
+                            >
+                                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                                Confirmar Cita
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            )}
+        </Tabs>
+    );
+}

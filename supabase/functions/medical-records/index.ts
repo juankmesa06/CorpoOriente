@@ -3,11 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 };
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response('ok', { headers: corsHeaders, status: 200 });
   }
 
   try {
@@ -43,7 +44,7 @@ Deno.serve(async (req) => {
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
-    const action = pathParts[pathParts.length - 1] || url.searchParams.get('action');
+    const action = url.searchParams.get('action') || pathParts[pathParts.length - 1];
 
     // Get patient medical history
     if (action === 'history' && req.method === 'GET') {

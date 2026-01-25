@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAppointments } from '@/hooks/useAppointments';
 import { Clock, Video, MapPin, Loader2, DoorOpen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface AppointmentBookingProps {
   doctorId: string;
@@ -29,7 +30,8 @@ export const AppointmentBooking = ({
   const [isVirtual, setIsVirtual] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState<string>('');
   const [notes, setNotes] = useState('');
-  
+  const navigate = useNavigate();
+
   const { loading, slots, rooms, getAvailability, getRooms, createAppointment } = useAppointments();
 
   useEffect(() => {
@@ -53,16 +55,14 @@ export const AppointmentBooking = ({
 
   const handleBooking = async () => {
     if (!selectedSlot) return;
-    if (!isVirtual && !selectedRoom) {
-      return;
-    }
+    // Eliminated room check as patient doesn't select it
 
     const result = await createAppointment(
       doctorId,
       patientId,
       selectedSlot,
       isVirtual,
-      isVirtual ? undefined : selectedRoom,
+      undefined, // roomId is now undefined for patient booking
       notes || undefined
     );
 
@@ -71,7 +71,10 @@ export const AppointmentBooking = ({
       setSelectedSlot(null);
       setSelectedRoom('');
       setNotes('');
+      // Redirect to payment page instead of just closing
+      // onSuccess could be used to close modal if present, but navigation takes priority
       onSuccess?.();
+      navigate(`/payment/${result.id}`);
     }
   };
 
@@ -109,7 +112,7 @@ export const AppointmentBooking = ({
               <Clock className="h-4 w-4" />
               Horarios disponibles - {format(selectedDate, 'EEEE d MMMM', { locale: es })}
             </Label>
-            
+
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -161,27 +164,7 @@ export const AppointmentBooking = ({
               />
             </div>
 
-            {/* Selector de consultorio (solo para citas presenciales) */}
-            {!isVirtual && (
-              <div>
-                <Label className="text-base font-medium flex items-center gap-2">
-                  <DoorOpen className="h-4 w-4" />
-                  Consultorio
-                </Label>
-                <Select value={selectedRoom} onValueChange={setSelectedRoom}>
-                  <SelectTrigger className="mt-2">
-                    <SelectValue placeholder="Selecciona un consultorio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {rooms.map((room) => (
-                      <SelectItem key={room.id} value={room.id}>
-                        {room.name} {room.description && `- ${room.description}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            {/* Selector de consultorio (REMOVIDO: El paciente no selecciona consultorio) */}
 
             {/* Notas */}
             <div>
@@ -202,13 +185,13 @@ export const AppointmentBooking = ({
               <ul className="text-sm space-y-1 text-muted-foreground">
                 <li>📅 {format(new Date(selectedSlot), 'EEEE d MMMM yyyy', { locale: es })}</li>
                 <li>🕐 {formatSlotTime(selectedSlot)} - {format(new Date(new Date(selectedSlot).getTime() + 60 * 60 * 1000), 'HH:mm')}</li>
-                <li>{isVirtual ? '💻 Virtual' : `🏥 Presencial - ${rooms.find(r => r.id === selectedRoom)?.name || ''}`}</li>
+                <li>{isVirtual ? '💻 Virtual' : '🏥 Presencial'}</li>
               </ul>
             </div>
 
             <Button
               onClick={handleBooking}
-              disabled={loading || (!isVirtual && !selectedRoom)}
+              disabled={loading}
               className="w-full"
               size="lg"
             >

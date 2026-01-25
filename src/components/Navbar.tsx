@@ -4,9 +4,30 @@ import { Badge } from '@/components/ui/badge';
 import { Link, useNavigate } from 'react-router-dom';
 import { Stethoscope, LogOut, UserCircle, Settings, Calendar, FileText, LayoutDashboard } from 'lucide-react';
 
+import { useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+
 export const Navbar = () => {
     const { user, roles, signOut, hasRole } = useAuth();
     const navigate = useNavigate();
+    const [userName, setUserName] = useState<string>('');
+
+    useEffect(() => {
+        const fetchUserName = async () => {
+            if (user) {
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('full_name')
+                    .eq('user_id', user.id)
+                    .maybeSingle();
+
+                if (data?.full_name) {
+                    setUserName(data.full_name);
+                }
+            }
+        };
+        fetchUserName();
+    }, [user]);
 
     const getRoleBadgeVariant = (role: string) => {
         switch (role) {
@@ -48,12 +69,7 @@ export const Navbar = () => {
                         <Calendar className="h-4 w-4" />
                         {hasRole('patient') ? 'Mis Citas' : 'Agenda'}
                     </Link>
-                    {hasRole('patient') && (
-                        <Link to="/medical-record" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
-                            <FileText className="h-4 w-4" />
-                            Historial Médico
-                        </Link>
-                    )}
+
                     <Link to="/settings" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
                         <Settings className="h-4 w-4" />
                         Configuración
@@ -63,14 +79,16 @@ export const Navbar = () => {
                 <div className="flex items-center gap-4">
                     <div className="hidden md:flex items-center gap-2">
                         <UserCircle className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm font-medium">{user?.email?.split('@')[0]}</span>
+                        <span className="text-sm font-medium">{userName || user?.email?.split('@')[0]}</span>
                     </div>
                     <div className="flex gap-1">
-                        {roles.map(role => (
-                            <Badge key={role} variant={getRoleBadgeVariant(role)} className="text-[10px] px-2 py-0">
-                                {getRoleLabel(role)}
-                            </Badge>
-                        ))}
+                        {roles
+                            .filter(role => !(role === 'doctor' && roles.includes('admin')))
+                            .map(role => (
+                                <Badge key={role} variant={getRoleBadgeVariant(role)} className="text-[10px] px-2 py-0">
+                                    {getRoleLabel(role)}
+                                </Badge>
+                            ))}
                     </div>
                     <Button variant="ghost" size="sm" onClick={signOut} className="hover:text-destructive h-9 w-9 p-0 md:w-auto md:px-3">
                         <LogOut className="h-4 w-4 md:mr-2" />

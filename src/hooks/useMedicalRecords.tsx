@@ -111,14 +111,13 @@ export const useMedicalRecords = () => {
 
   // Get patient medical history
   const getPatientHistory = async (patientId: string): Promise<PatientMedicalHistory> => {
-    const headers = await getAuthHeaders();
-    const response = await fetch(`${functionsUrl}?action=history&patient_id=${patientId}`, {
-      method: 'GET',
-      headers
+    // Call RPC directly (Bypassing Edge Function to use correct RLS/Auth context instantly)
+    const { data, error } = await supabase.rpc('get_patient_medical_history', {
+      _patient_id: patientId
     });
-    const data = await response.json();
-    if (!data.success) throw new Error(data.error);
-    return data.data;
+
+    if (error) throw error;
+    return data as PatientMedicalHistory;
   };
 
   // Create medical entry
@@ -166,7 +165,7 @@ export const useMedicalRecords = () => {
     let url = `${functionsUrl}?action=audit`;
     if (patientId) url += `&patient_id=${patientId}`;
     if (limit) url += `&limit=${limit}`;
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers

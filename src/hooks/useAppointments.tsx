@@ -60,10 +60,23 @@ export const useAppointments = () => {
 
       if (error) {
         console.error('Invoke error:', error);
-        throw error;
+        // Try to interpret the error body if available
+        let errorMessage = 'Error al obtener disponibilidad';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          // @ts-ignore - Supabase specific error structure might have context
+          if (error.context && error.context.json) {
+            try {
+              // @ts-ignore
+              const body = await error.context.json();
+              if (body && body.error) errorMessage = body.error;
+            } catch (e) { /* ignore */ }
+          }
+        }
+        throw new Error(errorMessage);
       }
 
-      // If the function returns an error object inside data
+      // If the function returns an error object inside data (some invocation styles)
       if (data && data.error) throw new Error(data.error);
 
       setSlots(data.slots || []);
@@ -90,6 +103,8 @@ export const useAppointments = () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error('No autenticado');
 
+      console.log('Creating appointment with:', { doctorId, patientId, startTime, isVirtual, roomId });
+
       // Use invoke for POST
       const { data, error } = await supabase.functions.invoke('appointments?action=create', {
         body: {
@@ -97,7 +112,7 @@ export const useAppointments = () => {
           patient_id: patientId,
           start_time: startTime,
           is_virtual: isVirtual,
-          room_id: roomId,
+          room_id: roomId || null, // Send null if undefined/empty
           notes
         },
         headers: {
@@ -108,7 +123,19 @@ export const useAppointments = () => {
 
       if (error) {
         console.error('Invoke create error:', error);
-        throw error;
+        let errorMessage = 'Error al crear la cita';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+          // @ts-ignore
+          if (error.context && error.context.json) {
+            try {
+              // @ts-ignore
+              const body = await error.context.json();
+              if (body && body.error) errorMessage = body.error;
+            } catch (e) { /* ignore */ }
+          }
+        }
+        throw new Error(errorMessage);
       }
 
       if (data && data.error) throw new Error(data.error);
@@ -117,7 +144,11 @@ export const useAppointments = () => {
       return data.appointment;
     } catch (error: any) {
       console.error('Error creando cita:', error);
-      toast.error(error.message || 'Error al crear la cita');
+      // Clean up the error message if it's the generic one
+      const displayError = error.message.includes('non-2xx')
+        ? 'Error de validación en el servidor'
+        : error.message;
+      toast.error(displayError || 'Error al crear la cita');
       return null;
     } finally {
       setLoading(false);

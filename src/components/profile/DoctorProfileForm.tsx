@@ -19,6 +19,7 @@ export const DoctorProfileForm = () => {
         license_number: '',
         bio: '',
         consultation_duration_min: 60,
+        consultation_fee: 0,
         education: '',
         photo_url: ''
     });
@@ -46,6 +47,7 @@ export const DoctorProfileForm = () => {
                         license_number: data.license_number || '',
                         bio: data.bio || '',
                         consultation_duration_min: data.consultation_duration_min || 60,
+                        consultation_fee: data.consultation_fee || 0,
                         education: data.education || '',
                         photo_url: data.photo_url || ''
                     });
@@ -115,6 +117,7 @@ export const DoctorProfileForm = () => {
                     license_number: formData.license_number,
                     bio: formData.bio,
                     consultation_duration_min: formData.consultation_duration_min,
+                    consultation_fee: formData.consultation_fee,
                     education: formData.education,
                     photo_url: formData.photo_url,
                     updated_at: new Date().toISOString(),
@@ -245,14 +248,29 @@ export const DoctorProfileForm = () => {
                         />
                     </div>
 
-                    <div className="space-y-2 max-w-xs">
-                        <Label htmlFor="duration">Duración de Consulta (minutos)</Label>
-                        <Input
-                            id="duration"
-                            type="number"
-                            value={formData.consultation_duration_min}
-                            onChange={(e) => setFormData({ ...formData, consultation_duration_min: parseInt(e.target.value) })}
-                        />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="duration">Duración de Consulta (minutos)</Label>
+                            <Input
+                                id="duration"
+                                type="number"
+                                value={formData.consultation_duration_min}
+                                onChange={(e) => setFormData({ ...formData, consultation_duration_min: parseInt(e.target.value) })}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="fee">Valor Consulta (COP)</Label>
+                            <Input
+                                id="fee"
+                                type="number"
+                                placeholder="Ej: 150000"
+                                value={formData.consultation_fee}
+                                onChange={(e) => setFormData({ ...formData, consultation_fee: parseFloat(e.target.value) || 0 })}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Costo por sesión para pacientes particulares.
+                            </p>
+                        </div>
                     </div>
 
                     <Button type="submit" className="w-full md:w-auto" disabled={saving}>

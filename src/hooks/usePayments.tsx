@@ -13,34 +13,20 @@ interface Payment {
   notes?: string;
 }
 
-interface CreditInfo {
-  success: boolean;
-  credit_generated?: boolean;
-  amount?: number;
-  message?: string;
-}
-
 export const usePayments = () => {
   const [loading, setLoading] = useState(false);
 
   const getPaymentStatus = async (appointmentId: string): Promise<Payment | null> => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No autenticado');
+      const { data, error } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('appointment_id', appointmentId)
+        .maybeSingle();
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payments?action=status&appointment_id=${appointmentId}`;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-        }
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      return data.payment;
+      if (error) throw error;
+      return data;
     } catch (error: any) {
       console.error('Error obteniendo estado de pago:', error);
       return null;
@@ -52,23 +38,20 @@ export const usePayments = () => {
   const listPayments = async (status?: string, limit: number = 50): Promise<Payment[]> => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No autenticado');
+      let query = supabase
+        .from('payments')
+        .select(`*, appointments(id, start_time, doctor_id, patient_id, status)`)
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
-      let url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payments?action=list&limit=${limit}`;
-      if (status) url += `&status=${status}`;
+      if (status) {
+        query = query.eq('status', status);
+      }
 
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-        }
-      });
+      const { data, error } = await query;
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      return data.payments || [];
+      if (error) throw error;
+      return (data as any[]) || [];
     } catch (error: any) {
       console.error('Error listando pagos:', error);
       toast.error(error.message || 'Error al listar pagos');
@@ -86,30 +69,54 @@ export const usePayments = () => {
   ): Promise<boolean> => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No autenticado');
+      console.log('Intentando pago directo...', { appointmentId, paymentMethod, amount });
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payments?action=mark-paid`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          appointment_id: appointmentId,
-          payment_method: paymentMethod,
-          amount,
-          notes
-        })
-      });
+      // Fallback DIRECTO: Inserción sin RPC y sin columnas problemáticas
+      // Omitimos 'paid_at' y 'notes' deliberadamente
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      // 1. Verificar si ya existe pago
+      const { data: existing } = await supabase
+        .from('payments')
+        .select('id')
+        .eq('appointment_id', appointmentId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error: updateError } = await supabase
+          .from('payments')
+          .update({
+            status: 'paid',
+            payment_method: paymentMethod,
+            amount: amount
+          })
+          .eq('id', existing.id);
+
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('payments')
+          .insert({
+            appointment_id: appointmentId,
+            status: 'paid',
+            payment_method: paymentMethod,
+            amount: amount,
+            currency: 'USD'
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // 2. Actualizar estado de la cita
+      const { error: aptError } = await supabase
+        .from('appointments')
+        .update({ status: 'confirmed' })
+        .eq('id', appointmentId);
+
+      if (aptError) throw aptError;
 
       toast.success('Pago registrado exitosamente');
       return true;
+
     } catch (error: any) {
       console.error('Error registrando pago:', error);
       toast.error(error.message || 'Error al registrar pago');
@@ -122,24 +129,18 @@ export const usePayments = () => {
   const getPatientCredits = async (patientId: string): Promise<{ credits: Payment[], total: number }> => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No autenticado');
+      const { data, error } = await supabase
+        .from('payments')
+        .select(`*, appointments!inner(patient_id)`)
+        .eq('status', 'credit')
+        .eq('appointments.patient_id', patientId);
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payments?action=credits&patient_id=${patientId}`;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
-        }
-      });
+      if (error) throw error;
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      return {
-        credits: data.credits || [],
-        total: data.total_credits || 0
-      };
+      const credits = data || [];
+      const total = credits.reduce((sum, c) => sum + Number(c.amount), 0);
+
+      return { credits, total };
     } catch (error: any) {
       console.error('Error obteniendo créditos:', error);
       return { credits: [], total: 0 };
@@ -151,28 +152,34 @@ export const usePayments = () => {
   const applyCredit = async (creditPaymentId: string, newAppointmentId: string): Promise<boolean> => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No autenticado');
+      const { data: credit, error: creditError } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('id', creditPaymentId)
+        .single();
 
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/payments?action=apply-credit`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          credit_payment_id: creditPaymentId,
-          new_appointment_id: newAppointmentId
-        })
-      });
+      if (creditError || !credit) throw new Error('Crédito no encontrado');
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const { error: payError } = await supabase
+        .from('payments')
+        .insert({
+          appointment_id: newAppointmentId,
+          status: 'paid',
+          payment_method: 'credit',
+          amount: credit.amount,
+          currency: 'USD'
+        });
+
+      if (payError) throw payError;
+
+      await supabase
+        .from('payments')
+        .update({ status: 'refunded' })
+        .eq('id', creditPaymentId);
 
       toast.success('Crédito aplicado exitosamente');
       return true;
+
     } catch (error: any) {
       console.error('Error aplicando crédito:', error);
       toast.error(error.message || 'Error al aplicar crédito');

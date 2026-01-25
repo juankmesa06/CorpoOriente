@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, FileText, Calendar } from 'lucide-react';
+import { Users, FileText, Calendar, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -17,7 +17,11 @@ interface Patient {
     status: string;
 }
 
-export const DoctorPatientHistory = () => {
+interface DoctorPatientHistoryProps {
+    onSelectPatient?: (patientId: string) => void;
+}
+
+export const DoctorPatientHistory = ({ onSelectPatient }: DoctorPatientHistoryProps) => {
     const { user } = useAuth();
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
@@ -179,12 +183,21 @@ export const DoctorPatientHistory = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <Link to="/medical-record">
-                                    <Button variant="outline" size="sm">
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => onSelectPatient?.(patient.patient_id)}
+                                    >
                                         <FileText className="h-4 w-4 mr-2" />
-                                        Ver Historial
+                                        Ver Detalles
                                     </Button>
-                                </Link>
+                                    <Link to={`/medical-record?id=${patient.patient_id}`}>
+                                        <Button variant="ghost" size="icon" title="Ir a Historia Clínica">
+                                            <ArrowRight className="h-4 w-4" />
+                                        </Button>
+                                    </Link>
+                                </div>
                             </div>
                         ))}
                     </div>

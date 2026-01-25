@@ -1,119 +1,169 @@
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Building2, RefreshCw, CheckCircle2, AlertCircle, DollarSign } from 'lucide-react';
-import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import {
+    Building2,
+    Users,
+    CreditCard,
+    Stethoscope,
+    Settings,
+    Wallet,
+    CalendarCheck,
+    Banknote
+} from 'lucide-react';
 import { RoomManagement } from './RoomManagement';
 import { RoomReports } from './RoomReports';
 import { DoctorAffiliationManager } from './DoctorAffiliationManager';
 import { AdminPatientManager } from './AdminPatientManager';
-import { AdminAppointmentManager } from '@/components/admin/AdminAppointmentManager';
+import { AdminRoleManager } from './AdminRoleManager';
+import { AdminOrganizationConfig } from './AdminOrganizationConfig';
+import { AdminAccountingReports } from './AdminAccountingReports';
+import { AdminAppointmentBooking } from './AdminAppointmentBooking';
+import { AdminPaymentManager } from './AdminPaymentManager';
+import { supabase } from '@/integrations/supabase/client';
+
+type Section = 'spaces' | 'appointments' | 'payments' | 'doctor-billing' | 'users' | 'settings-roles' | 'settings-org' | 'settings-accounting';
 
 const AdminDashboard = () => {
-    const [isSyncing, setIsSyncing] = useState(false);
+    const [activeSection, setActiveSection] = useState<Section>('spaces');
+    const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+    const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
-    const syncProfiles = async () => {
-        setIsSyncing(true);
-        const toastId = toast.loading('Sincronizando perfiles de médicos...');
+    useEffect(() => {
+        const checkRole = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: roles } = await supabase
+                    .from('user_roles')
+                    .select('role')
+                    .eq('user_id', user.id);
 
-        try {
-            // Consultamos roles de doctor
-            const { data: doctorsWithoutProfile, error: fetchError } = await supabase
-                .from('user_roles')
-                .select('user_id')
-                .eq('role', 'doctor');
-
-            if (fetchError) throw fetchError;
-
-            if (!doctorsWithoutProfile || doctorsWithoutProfile.length === 0) {
-                toast.success('No se encontraron perfiles para sincronizar', { id: toastId });
-                return;
+                const hasSuperAdmin = roles?.some(r => (r.role as string) === 'super_admin');
+                setIsSuperAdmin(!!hasSuperAdmin);
             }
+        };
+        checkRole();
+    }, []);
 
-            let syncCount = 0;
-            for (const doc of doctorsWithoutProfile) {
-                // Intentar insertar si no existe (backfill)
-                const { error: insertError } = await supabase
-                    .from('doctor_profiles')
-                    .insert({
-                        user_id: doc.user_id,
-                        specialty: 'Psicoterapeuta'
-                    });
-
-                if (!insertError) syncCount++;
-            }
-
-            toast.success(`Sincronización completada: ${syncCount} perfiles procesados`, {
-                id: toastId,
-                icon: <CheckCircle2 className="h-4 w-4 text-green-500" />
-            });
-        } catch (err: any) {
-            console.error('Sync error:', err);
-            toast.error('Error en la sincronización: ' + err.message, {
-                id: toastId,
-                icon: <AlertCircle className="h-4 w-4 text-destructive" />
-            });
-        } finally {
-            setIsSyncing(false);
+    const renderContent = () => {
+        switch (activeSection) {
+            case 'spaces':
+                return (
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Centro de Control</h2>
+                            <p className="text-muted-foreground">Administra espacios, monitorea ocupación y gestiona citas desde un solo lugar.</p>
+                        </div>
+                        <RoomManagement />
+                    </div>
+                );
+            case 'payments':
+                return (
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Cobros</h2>
+                            <p className="text-muted-foreground">Historial de pagos y registro de ingresos.</p>
+                        </div>
+                        <AdminPaymentManager />
+                    </div>
+                );
+            case 'doctor-billing':
+                return (
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Cobros a Médicos y Afiliaciones</h2>
+                            <p className="text-muted-foreground">Gestiona las membresías de especialistas y el uso de espacios.</p>
+                        </div>
+                        <DoctorAffiliationManager />
+                        <RoomReports />
+                    </div>
+                );
+            case 'users':
+                return (
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Pacientes</h2>
+                            <p className="text-muted-foreground">Administra los expedientes y datos de pacientes.</p>
+                        </div>
+                        <AdminPatientManager />
+                    </div>
+                );
+            case 'settings-roles':
+                if (!isSuperAdmin) return null;
+                return <AdminRoleManager />;
+            case 'settings-org':
+                if (!isSuperAdmin) return null;
+                return <AdminOrganizationConfig />;
+            case 'settings-accounting':
+                if (!isSuperAdmin) return null;
+                return <AdminAccountingReports />;
+            default:
+                return null;
         }
     };
 
+    const NavItem = ({ section, label, icon: Icon, subItem = false }: { section: Section; label: string; icon: any; subItem?: boolean }) => (
+        <button
+            onClick={() => setActiveSection(section)}
+            className={`w-full flex items-center gap-3 px-4 py-2 text-sm font-medium transition-colors rounded-lg ${activeSection === section
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'text-muted-foreground hover:bg-gray-100 hover:text-gray-900'
+                } ${subItem ? 'pl-11 text-xs' : ''}`}
+        >
+            {!subItem && <Icon className="h-4 w-4" />}
+            {label}
+        </button>
+    );
+
     return (
-        <div className="space-y-6">
-            <Card className="border-primary/20 bg-primary/5">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <RefreshCw className={`h-5 w-5 ${isSyncing ? 'animate-spin' : ''}`} />
-                        Mantenimiento del Sistema
-                    </CardTitle>
-                    <CardDescription>Utilidades para asegurar la integridad de los datos.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-                        <div className="text-sm">
-                            <p className="font-medium">Sincronizar Perfiles de Médicos</p>
-                            <p className="text-muted-foreground">Asegura que todos los médicos tengan su ficha profesional creada.</p>
-                        </div>
-                        <Button onClick={syncProfiles} disabled={isSyncing} variant="secondary">
-                            {isSyncing ? 'Sincronizando...' : 'Ejecutar Sincronización'}
-                        </Button>
+        <div className="flex flex-col md:flex-row gap-8 min-h-[600px]">
+            {/* Sidebar */}
+            <aside className="w-full md:w-64 shrink-0">
+                <div className="sticky top-24 space-y-2">
+                    <div className="px-4 py-2 mb-4">
+                        <h2 className="text-lg font-semibold text-gray-900">Administración</h2>
+                        <p className="text-xs text-muted-foreground">
+                            {isSuperAdmin ? 'Super Admin' : 'Panel de Control'}
+                        </p>
                     </div>
-                </CardContent>
-            </Card>
 
-            {/* Admin Appointment Booking */}
-            <AdminAppointmentManager />
+                    <nav className="space-y-1">
+                        <NavItem section="spaces" label="Centro de Control" icon={Building2} />
+                        <NavItem section="payments" label="Gestión de Cobros" icon={Banknote} />
+                        <NavItem section="doctor-billing" label="Cobros a Médicos" icon={Stethoscope} />
+                        <NavItem section="users" label="Gestión de Pacientes" icon={Users} />
 
-            {/* Room Management Section */}
-            <RoomManagement />
+                        {isSuperAdmin && (
+                            <div className="pt-2">
+                                <button
+                                    onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                                    className="w-full flex items-center justify-between px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-gray-50 rounded-lg transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <Settings className="h-4 w-4" />
+                                        <span>Configuración</span>
+                                    </div>
+                                </button>
 
-            {/* Room Reports Section */}
-            <RoomReports />
+                                {isSettingsOpen && (
+                                    <div className="mt-1 space-y-1 animate-in slide-in-from-top-2 duration-200">
+                                        <NavItem section="settings-roles" label="Roles y Permisos" icon={null} subItem />
+                                        <NavItem section="settings-org" label="Organización" icon={null} subItem />
+                                        <NavItem section="settings-accounting" label="Reportes Contables" icon={null} subItem />
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </nav>
+                </div>
+            </aside>
 
-            {/* Doctor Affiliation Management */}
-            <DoctorAffiliationManager />
-
-            {/* Patient Management Section */}
-            <AdminPatientManager />
-
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Building2 className="h-5 w-5" />
-                        Panel de Administración
-                    </CardTitle>
-                    <CardDescription>Gestiona usuarios, roles y configuración del sistema</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                    <Button variant="outline" className="w-full justify-start">Gestionar usuarios</Button>
-                    <Button variant="outline" className="w-full justify-start">Configurar organización</Button>
-                    <Button variant="outline" className="w-full justify-start">
-                        <DollarSign className="h-4 w-4 mr-2" />
-                        Reportes Contables
-                    </Button>
-                </CardContent>
-            </Card>
+            {/* Main Content */}
+            <main className="flex-1 min-w-0">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 min-h-full">
+                    {renderContent()}
+                </div>
+            </main>
         </div>
     );
 };

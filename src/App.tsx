@@ -11,6 +11,7 @@ import MedicalRecord from "./pages/MedicalRecord";
 import Settings from "./pages/Settings";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import PatientPayment from "./pages/PatientPayment";
 import { Loader2 } from "lucide-react";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,14 @@ const AppRoutes = () => (
       element={
         <ProtectedRoute>
           <MedicalRecord />
+        </ProtectedRoute>
+      }
+    />
+    <Route
+      path="/payment/:appointmentId"
+      element={
+        <ProtectedRoute>
+          <PatientPayment />
         </ProtectedRoute>
       }
     />

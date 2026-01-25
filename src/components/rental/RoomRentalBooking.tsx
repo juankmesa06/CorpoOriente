@@ -14,6 +14,21 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+interface RoomRentalInsert {
+    room_id: string;
+    user_id: string | null;
+    renter_name: string;
+    renter_email: string;
+    renter_phone: string;
+    start_time: string;
+    end_time: string;
+    purpose: string;
+    hourly_rate: number;
+    total_price: number;
+    status: 'confirmed' | 'pending' | 'cancelled';
+    appointment_id: string | null;
+}
+
 interface Room {
     id: string;
     name: string;
@@ -29,7 +44,19 @@ interface TimeSlot {
     available: boolean;
 }
 
-export const RoomRentalBooking = () => {
+interface AppointmentForRental {
+    id: string;
+    patient_name: string;
+    start_time: string;
+    end_time: string;
+}
+
+interface RoomRentalBookingProps {
+    appointment?: AppointmentForRental;
+    onSuccess?: () => void;
+}
+
+export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingProps) => {
     const { user, hasRole } = useAuth();
     const [rooms, setRooms] = useState<Room[]>([]);
     const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
@@ -59,6 +86,25 @@ export const RoomRentalBooking = () => {
     useEffect(() => {
         loadRooms();
     }, []);
+
+    useEffect(() => {
+        if (appointment) {
+            const startDate = new Date(appointment.start_time);
+            setSelectedDate(startDate);
+
+            const hours = startDate.getHours();
+            const minutes = startDate.getMinutes();
+            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+
+            setFormData(prev => ({
+                ...prev,
+                renter_name: `Dr. ${user?.email?.split('@')[0] || ''}`, // Self-fill doctor name
+                purpose: `Consulta con ${appointment.patient_name}`,
+                start_hour: timeString,
+                duration_hours: 1 // Default to 1, or calculate from end_time
+            }));
+        }
+    }, [appointment, user]);
 
     useEffect(() => {
         if (user?.email) {
@@ -119,7 +165,7 @@ export const RoomRentalBooking = () => {
         endOfDay.setHours(23, 59, 59, 999);
 
         const { data: rentals } = await supabase
-            .from('room_rentals')
+            .from('room_rentals' as any)
             .select('start_time, end_time')
             .eq('room_id', selectedRoom.id)
             .gte('start_time', startOfDay.toISOString())
@@ -177,10 +223,7 @@ export const RoomRentalBooking = () => {
     };
 
     const handlePaymentAndBooking = async () => {
-        if (!cardDetails.number || !cardDetails.expiry || !cardDetails.cvc || !cardDetails.name) {
-            toast.error('Por favor completa los datos del pago');
-            return;
-        }
+        // Card validation skipped as per request
 
         setLoading(true);
 
@@ -196,21 +239,26 @@ export const RoomRentalBooking = () => {
         endTime.setHours(startTime.getHours() + formData.duration_hours);
 
         // Crear reserva pagada
-        const { error } = await supabase
-            .from('room_rentals')
-            .insert([{
-                room_id: selectedRoom!.id,
-                user_id: user?.id || null,
-                renter_name: formData.renter_name,
-                renter_email: formData.renter_email,
-                renter_phone: formData.renter_phone,
-                start_time: startTime.toISOString(),
-                end_time: endTime.toISOString(),
-                purpose: formData.purpose,
-                hourly_rate: selectedRoom!.hourly_rate || 50000,
-                total_price: (selectedRoom!.hourly_rate || 50000) * formData.duration_hours,
-                status: 'confirmed' // Confirmado porque ya pagó
-            }]);
+        const rentalPayload: RoomRentalInsert = {
+            room_id: selectedRoom!.id,
+            user_id: user?.id || null,
+            renter_name: formData.renter_name,
+            renter_email: formData.renter_email,
+            renter_phone: formData.renter_phone,
+            start_time: startTime.toISOString(),
+            end_time: endTime.toISOString(),
+            purpose: formData.purpose,
+            hourly_rate: selectedRoom!.hourly_rate || 50000,
+            total_price: (selectedRoom!.hourly_rate || 50000) * formData.duration_hours,
+            status: 'confirmed', // Confirmado porque ya pagó
+            appointment_id: appointment?.id || null // Link to appointment
+        };
+
+        const { data: rentalData, error } = await supabase
+            .from('room_rentals' as any)
+            .insert([rentalPayload])
+            .select()
+            .single();
 
         setLoading(false);
         setShowPayment(false);
@@ -220,6 +268,32 @@ export const RoomRentalBooking = () => {
             toast.error('Error al procesar la reserva. El pago será reversado.');
         } else {
             toast.success('¡Pago exitoso y reserva confirmada!');
+
+            // If linked to an appointment, update the appointment with rental_id
+            if (appointment && rentalData) {
+                const { error: aptError } = await supabase
+                    .from('appointments')
+                    .update({
+                        rental_id: rentalData.id,
+                        room_id: selectedRoom!.id,
+                        location_confirmed: true
+                    })
+                    .eq('id', appointment.id);
+
+                if (aptError) {
+                    console.error('Error linking appointment:', aptError);
+                    toast.error('Reserva creada, pero hubo un error actualizando la cita.');
+                } else {
+                    // Trigger notification
+                    supabase.functions.invoke('notify-patient', {
+                        body: { appointment_id: appointment.id, rental_id: rentalData.id }
+                    }).then(({ error }) => {
+                        if (!error) toast.success('Notificación enviada al paciente');
+                    });
+                }
+            }
+
+            if (onSuccess) onSuccess();
             resetForm();
             checkAvailability();
         }
@@ -286,52 +360,10 @@ export const RoomRentalBooking = () => {
                         <p className="text-3xl font-bold text-primary">{formatCOP(total)}</p>
                     </div>
 
-                    <div className="space-y-4 border p-4 rounded-lg">
-                        <div className="flex items-center gap-2 mb-2">
-                            <CreditCard className="h-5 w-5 text-muted-foreground" />
-                            <h3 className="font-semibold">Detalles de la Tarjeta</h3>
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Nombre en la tarjeta</Label>
-                            <Input
-                                placeholder="Como aparece en la tarjeta"
-                                value={cardDetails.name}
-                                onChange={e => setCardDetails({ ...cardDetails, name: e.target.value })}
-                            />
-                        </div>
-
-                        <div className="space-y-2">
-                            <Label>Número de tarjeta</Label>
-                            <Input
-                                placeholder="0000 0000 0000 0000"
-                                maxLength={19}
-                                value={cardDetails.number}
-                                onChange={e => setCardDetails({ ...cardDetails, number: e.target.value.replace(/\D/g, '').replace(/(.{4})/g, '$1 ').trim() })}
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Expiración (MM/YY)</Label>
-                                <Input
-                                    placeholder="MM/YY"
-                                    maxLength={5}
-                                    value={cardDetails.expiry}
-                                    onChange={e => setCardDetails({ ...cardDetails, expiry: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>CVC</Label>
-                                <Input
-                                    placeholder="123"
-                                    maxLength={3}
-                                    type="password"
-                                    value={cardDetails.cvc}
-                                    onChange={e => setCardDetails({ ...cardDetails, cvc: e.target.value })}
-                                />
-                            </div>
-                        </div>
+                    {/* Payment Form Removed */}
+                    <div className="bg-muted/30 p-4 rounded-lg text-center">
+                        <p className="text-muted-foreground">Confirmación de reserva inmediata.</p>
+                        <p className="text-xs text-muted-foreground">El pago se procesará internamente.</p>
                     </div>
 
                     <div className="flex gap-3">

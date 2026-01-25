@@ -4,6 +4,8 @@ import { DoctorProfileForm } from '@/components/profile/DoctorProfileForm';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Settings as SettingsIcon, User } from 'lucide-react';
 
+import { PatientProfileForm } from '@/components/profile/PatientProfileForm';
+
 const Settings = () => {
     const { user, hasRole } = useAuth();
 
@@ -22,28 +24,33 @@ const Settings = () => {
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-                    {/* Perfil Básico (Para todos) */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <User className="h-5 w-5" />
-                                Perfil de Usuario
-                            </CardTitle>
-                            <CardDescription>Información básica de tu cuenta.</CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Email</p>
-                                    <p className="font-medium">{user?.email}</p>
+                    {/* Perfil del Paciente (Edición Completa) */}
+                    {hasRole('patient') ? (
+                        <PatientProfileForm />
+                    ) : (
+                        /* Perfil Básico (Lectura para otros roles) */
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <User className="h-5 w-5" />
+                                    Perfil de Usuario
+                                </CardTitle>
+                                <CardDescription>Información básica de tu cuenta.</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Email</p>
+                                        <p className="font-medium">{user?.email}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-muted-foreground">Nombre</p>
+                                        <p className="font-medium">{user?.user_metadata?.full_name || 'No especificado'}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Nombre</p>
-                                    <p className="font-medium">{user?.user_metadata?.full_name || 'No especificado'}</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     {/* Sección específica para Doctores */}
                     {hasRole('doctor') && (

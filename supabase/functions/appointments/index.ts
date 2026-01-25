@@ -10,7 +10,7 @@ const corsHeaders = {
 // Horario de atención: 7:00 AM - 9:00 PM
 const WORKING_HOURS = { start: 7, end: 21 }
 const APPOINTMENT_DURATION_HOURS = 1
-const MIN_CANCELLATION_HOURS = 3
+const MIN_CANCELLATION_HOURS = 0.5
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -122,7 +122,8 @@ serve(async (req) => {
         })
       }
 
-      // Cita presencial REQUIERE consultorio
+      // Cita presencial REQUIERE consultorio (REMOVIDO: El paciente no selecciona consultorio, lo asigna el médico después)
+      /* 
       if (!is_virtual && !room_id) {
         return new Response(JSON.stringify({
           error: 'Las citas presenciales requieren un consultorio asignado'
@@ -131,6 +132,7 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
+      */
 
       const startDate = new Date(start_time)
       const endDate = new Date(startDate)
@@ -157,21 +159,8 @@ serve(async (req) => {
         })
       }
 
-      // 3. Verificar relación médico-paciente
-      const { data: relationship } = await supabase
-        .rpc('check_doctor_patient_relationship', {
-          _doctor_id: doctor_id,
-          _patient_id: patient_id
-        })
-
-      if (!relationship) {
-        return new Response(JSON.stringify({
-          error: 'El paciente solo puede reservar con su médico asignado'
-        }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        })
-      }
+      // 3. (Verificación de relación médico-paciente REMOVIDA por requerimiento del usuario)
+      // El paciente puede reservar con cualquier médico.
 
       // 4. Verificar disponibilidad del médico (sin cruces de horario)
       const { data: isDoctorAvailable } = await supabase

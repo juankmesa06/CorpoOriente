@@ -8,10 +8,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Stethoscope, Activity } from "lucide-react";
+import { Loader2, Stethoscope, Activity, FileText, ClipboardList, PenTool } from "lucide-react";
 import { CreateEntryInput, MedicalEntry, VitalSigns } from "@/hooks/useMedicalRecords";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const formSchema = z.object({
+  type: z.enum(["consultation", "evolution", "notes"]),
   chief_complaint: z.string().min(1, "El motivo de consulta es requerido"),
   diagnosis: z.string().optional(),
   evolution: z.string().optional(),
@@ -44,9 +46,12 @@ export const MedicalEntryForm = ({
   onCancel,
   isLoading = false
 }: MedicalEntryFormProps) => {
+  const [activeTab, setActiveTab] = useState<"consultation" | "evolution" | "notes">("consultation");
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      type: "consultation",
       chief_complaint: existingEntry?.chief_complaint || "",
       diagnosis: existingEntry?.diagnosis || "",
       evolution: existingEntry?.evolution || "",
@@ -63,7 +68,7 @@ export const MedicalEntryForm = ({
 
   const handleSubmit = async (values: FormValues) => {
     const vital_signs: VitalSigns = {};
-    
+
     if (values.blood_pressure) vital_signs.blood_pressure = values.blood_pressure;
     if (values.heart_rate) vital_signs.heart_rate = parseInt(values.heart_rate);
     if (values.temperature) vital_signs.temperature = parseFloat(values.temperature);
@@ -86,126 +91,153 @@ export const MedicalEntryForm = ({
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Stethoscope className="h-5 w-5" />
+    <Card className="border-primary/10 shadow-lg bg-white/50 backdrop-blur-sm">
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-xl text-primary">
+          <Stethoscope className="h-6 w-6" />
           {existingEntry ? "Actualizar Entrada Clínica" : "Nueva Entrada Clínica"}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-            {/* Main Clinical Fields */}
-            <div className="space-y-4">
-              <FormField
-                control={form.control}
-                name="chief_complaint"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Motivo de Consulta *</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Describa el motivo principal de la consulta..."
-                        className="min-h-[80px]"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
 
-              <FormField
-                control={form.control}
-                name="diagnosis"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Diagnóstico</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Diagnóstico clínico..."
-                        className="min-h-[60px]"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
+              <TabsList className="grid w-full grid-cols-3 mb-6 bg-primary/5 p-1 h-auto">
+                <TabsTrigger value="consultation" className="data-[state=active]:bg-white data-[state=active]:shadow-sm py-2">
+                  <ClipboardList className="w-4 h-4 mr-2" />
+                  Consulta
+                </TabsTrigger>
+                <TabsTrigger value="evolution" className="data-[state=active]:bg-white data-[state=active]:shadow-sm py-2">
+                  <Activity className="w-4 h-4 mr-2" />
+                  Evolución
+                </TabsTrigger>
+                <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm py-2">
+                  <FileText className="w-4 h-4 mr-2" />
+                  Notas
+                </TabsTrigger>
+              </TabsList>
 
-              <FormField
-                control={form.control}
-                name="evolution"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Evolución</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Evolución del paciente..."
-                        className="min-h-[60px]"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="space-y-6">
+                {/* Common Fields for all tabs (Motivo usually essential) */}
+                <FormField
+                  control={form.control}
+                  name="chief_complaint"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-secondary font-medium">
+                        {activeTab === 'evolution' ? 'Resumen de Evolución' : 'Motivo de Consulta / Título'} *
+                      </FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder={activeTab === 'evolution' ? "Breve estado del paciente..." : "Dolor de cabeza, Chequeo general..."}
+                          className="bg-white"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <FormField
-                control={form.control}
-                name="treatment_plan"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Plan de Tratamiento</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Tratamiento indicado, medicamentos, indicaciones..."
-                        className="min-h-[80px]"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                <TabsContent value="consultation" className="space-y-4 animate-in fade-in-50 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="diagnosis"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel>Diagnóstico</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Diagnóstico clínico..."
+                              className="min-h-[80px] bg-white resize-none"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="treatment_plan"
+                      render={({ field }) => (
+                        <FormItem className="md:col-span-2">
+                          <FormLabel>Plan de Tratamiento</FormLabel>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Medicamentos, reposo, indicaciones..."
+                              className="min-h-[100px] bg-white resize-none"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </TabsContent>
 
-              <FormField
-                control={form.control}
-                name="observations"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Observaciones</FormLabel>
-                    <FormControl>
-                      <Textarea 
-                        placeholder="Observaciones adicionales..."
-                        className="min-h-[60px]"
-                        {...field} 
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                <TabsContent value="evolution" className="space-y-4 animate-in fade-in-50 duration-300">
+                  <FormField
+                    control={form.control}
+                    name="evolution"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Detalle de Evolución</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Cambios en el estado del paciente, respuesta al tratamiento..."
+                            className="min-h-[150px] bg-white resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
 
-            <Separator />
+                <TabsContent value="notes" className="space-y-4 animate-in fade-in-50 duration-300">
+                  <FormField
+                    control={form.control}
+                    name="observations"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Observaciones Adicionales</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Notas privadas, recordatorios..."
+                            className="min-h-[150px] bg-white resize-none"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </TabsContent>
+              </div>
+            </Tabs>
 
-            {/* Vital Signs */}
-            <div>
-              <h3 className="text-sm font-medium flex items-center gap-2 mb-4">
-                <Activity className="h-4 w-4" />
+            <Separator className="my-6" />
+
+            {/* Vital Signs - Always visible but collapsible option could be nice. For now just distinct section */}
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-4 text-secondary">
+                <Activity className="h-4 w-4 text-primary" />
                 Signos Vitales
               </h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                 <FormField
                   control={form.control}
                   name="blood_pressure"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Presión Arterial</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Presión A.</FormLabel>
                       <FormControl>
-                        <Input placeholder="120/80" {...field} />
+                        <Input placeholder="120/80" className="h-8 bg-white" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -216,9 +248,9 @@ export const MedicalEntryForm = ({
                   name="heart_rate"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Frecuencia Cardíaca (bpm)</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Frecuencia C.</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="72" {...field} />
+                        <Input type="number" placeholder="bpm" className="h-8 bg-white" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -229,9 +261,9 @@ export const MedicalEntryForm = ({
                   name="temperature"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Temperatura (°C)</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Temp. (°C)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.1" placeholder="36.5" {...field} />
+                        <Input type="number" step="0.1" placeholder="°C" className="h-8 bg-white" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -242,9 +274,9 @@ export const MedicalEntryForm = ({
                   name="weight"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Peso (kg)</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Peso (kg)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.1" placeholder="70" {...field} />
+                        <Input type="number" step="0.1" placeholder="kg" className="h-8 bg-white" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -255,9 +287,9 @@ export const MedicalEntryForm = ({
                   name="height"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Altura (cm)</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Altura (cm)</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="170" {...field} />
+                        <Input type="number" placeholder="cm" className="h-8 bg-white" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -268,9 +300,9 @@ export const MedicalEntryForm = ({
                   name="oxygen_saturation"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Saturación O2 (%)</FormLabel>
+                      <FormLabel className="text-xs text-muted-foreground">Sat. O2 (%)</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="98" {...field} />
+                        <Input type="number" placeholder="%" className="h-8 bg-white" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -278,13 +310,13 @@ export const MedicalEntryForm = ({
               </div>
             </div>
 
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={onCancel}>
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="ghost" onClick={onCancel} className="hover:bg-red-50 hover:text-red-600">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90 text-white min-w-[150px]">
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {existingEntry ? "Guardar Cambios" : "Crear Entrada"}
+                {existingEntry ? "Guardar Cambios" : "Guardar Entrada"}
               </Button>
             </div>
           </form>

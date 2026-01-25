@@ -1,20 +1,105 @@
+
 import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { PatientNameDisplay } from '@/components/dashboard/PatientNameDisplay';
 import { MedicalHistoryTimeline } from '@/components/medical-records/MedicalHistoryTimeline';
+import { VitalSignsCard } from '@/components/medical-records/VitalSignsCard';
 import { useMedicalRecords, PatientMedicalHistory } from '@/hooks/useMedicalRecords';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { FileText, Loader2, Thermometer, Activity, Pill, AlertCircle, ArrowLeft, HeartPulse, User } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+
+import { MedicalEntryForm } from '@/components/medical-records/MedicalEntryForm';
+import { CreateEntryInput } from '@/hooks/useMedicalRecords';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const MedicalRecord = () => {
     const { user } = useAuth();
-    const { getPatientHistory } = useMedicalRecords();
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const patientId = searchParams.get('id');
+    const appointmentId = searchParams.get('appointment_id');
+    const isConsultationMode = searchParams.get('consultation') === 'true';
+
+    const { getPatientHistory, createEntry } = useMedicalRecords();
     const [loading, setLoading] = useState(true);
     const [history, setHistory] = useState<PatientMedicalHistory | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [vitalData, setVitalData] = useState<any>({
+        blood_type: null,
+        allergies: [],
+        current_medications: []
+    });
+
+    // Dialog state
+    const [isFinishDialogOpen, setIsFinishDialogOpen] = useState(false);
+    const [pendingEntryData, setPendingEntryData] = useState<CreateEntryInput | null>(null);
+
+    const handleSaveEntry = async (data: CreateEntryInput, completeAppointment = false) => {
+        try {
+            // 1. Create Entry
+            await createEntry(data);
+
+            // 2. If completing, update appointment status and notify
+            if (completeAppointment && appointmentId) {
+                // Update appointment status directly
+                await supabase
+                    .from('appointments')
+                    .update({ status: 'completed' })
+                    .eq('id', appointmentId);
+
+                // Notify Patient (if patientId matches a user)
+                if (patientId) {
+                    const { data: pProfile } = await supabase
+                        .from('patient_profiles')
+                        .select('user_id')
+                        .eq('id', patientId)
+                        .single();
+
+                    if (pProfile?.user_id) {
+                        await supabase
+                            .from('notifications')
+                            .insert([{
+                                user_id: pProfile.user_id,
+                                title: 'Consulta Finalizada',
+                                message: `El Dr. ${user?.user_metadata?.full_name || 'su médico'} ha finalizado la consulta y actualizado su historial.`,
+                                type: 'success'
+                            }]);
+                    }
+                }
+            }
+
+            toast.success(completeAppointment ? "Consulta finalizada y guardada" : "Entrada guardada exitosamente");
+
+            // Refresh history
+            if (patientId) {
+                const updatedHistory = await getPatientHistory(patientId);
+                setHistory(updatedHistory);
+            }
+
+            // Exit consultation mode
+            if (completeAppointment) {
+                navigate(`/medical-record?id=${patientId}`, { replace: true });
+            }
+        } catch (error: any) {
+            console.error("Error creating entry:", error);
+            toast.error(error.message || "Error al guardar la consulta");
+        }
+    };
 
     useEffect(() => {
         const fetchPatientData = async () => {
@@ -22,15 +107,50 @@ const MedicalRecord = () => {
 
             try {
                 setLoading(true);
-                const { data: profile } = await supabase
-                    .from('patient_profiles')
-                    .select('id')
-                    .eq('user_id', user.id)
-                    .single();
+                // 1. Fetch Profile Data (Vital Signs)
+                // If patientId is provided (Doctor view), use 'id'. Otherwise (Patient view), use 'user_id'.
+
+                let query = supabase.from('patient_profiles').select('id, blood_type, allergies');
+
+                if (patientId) {
+                    query = query.eq('id', patientId);
+                } else {
+                    query = query.eq('user_id', user.id);
+                }
+
+                const { data: profile, error: profileError } = await query.maybeSingle();
+
+                if (profileError) throw profileError;
 
                 if (profile) {
-                    const patientHistory = await getPatientHistory(profile.id);
-                    setHistory(patientHistory);
+                    setVitalData(prev => ({
+                        ...prev,
+                        blood_type: profile.blood_type,
+                        allergies: profile.allergies || []
+                    }));
+
+                    // 2. Fetch History using RPC
+                    try {
+                        const patientHistory = await getPatientHistory(profile.id);
+                        setHistory(patientHistory);
+                    } catch (e) {
+                        console.log("No medical history found or error fetching it");
+                    }
+
+                    // 3. Fetch Medications
+                    const { data: medRecord } = await supabase
+                        .from('medical_records')
+                        .select('current_medications')
+                        .eq('patient_id', profile.id)
+                        .maybeSingle();
+
+                    if (medRecord) {
+                        setVitalData(prev => ({
+                            ...prev,
+                            current_medications: medRecord.current_medications || []
+                        }));
+                    }
+
                 } else {
                     setError("No econtró información médica asociada.");
                 }
@@ -72,7 +192,6 @@ const MedicalRecord = () => {
         );
     }
 
-    const medicalRecord = history?.medical_record;
     const patient = history?.patient;
 
     return (
@@ -99,7 +218,9 @@ const MedicalRecord = () => {
                         </div>
                         <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg text-blue-700 border border-blue-100">
                             <User className="h-4 w-4" />
-                            <span className="font-medium text-sm">Paciente ID: {patient?.id?.slice(0, 8) || 'N/A'}</span>
+                            <span className="font-medium text-sm">
+                                Paciente: <PatientNameDisplay patientId={patientId || patient?.id || ''} className="font-semibold" />
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -108,85 +229,28 @@ const MedicalRecord = () => {
 
                     {/* Sidebar: Vital Information (4 cols) */}
                     <div className="lg:col-span-4 space-y-6">
-                        <Card className="border-none shadow-md overflow-hidden">
-                            <div className="bg-secondary/5 p-4 border-b border-secondary/10">
-                                <h2 className="font-semibold text-secondary flex items-center gap-2">
-                                    <HeartPulse className="h-5 w-5 text-primary" />
-                                    Datos Vitales
-                                </h2>
-                            </div>
-                            <CardContent className="p-0">
-                                <div className="divide-y divide-gray-100">
-                                    {/* Blood Type */}
-                                    <div className="p-4 flex items-start gap-4 hover:bg-gray-50 transition-colors">
-                                        <div className="bg-red-100 p-2 rounded-full text-red-600">
-                                            <Thermometer className="h-5 w-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Grupo Sanguíneo</p>
-                                            <p className="text-lg font-bold text-secondary mt-1">
-                                                {medicalRecord?.blood_type || 'No registrado'}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Allergies */}
-                                    <div className="p-4 flex items-start gap-4 hover:bg-gray-50 transition-colors">
-                                        <div className="bg-orange-100 p-2 rounded-full text-orange-600">
-                                            <Activity className="h-5 w-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Alergias</p>
-                                            <div className="flex flex-wrap gap-2 mt-2">
-                                                {patient?.allergies?.length ? (
-                                                    patient.allergies.map((a: string, i: number) => (
-                                                        <span key={i} className="px-2 py-1 text-xs font-medium bg-orange-50 text-orange-700 rounded-md border border-orange-100">
-                                                            {a}
-                                                        </span>
-                                                    ))
-                                                ) : (
-                                                    <span className="text-sm text-gray-500 italic">Ninguna conocida</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Medications */}
-                                    <div className="p-4 flex items-start gap-4 hover:bg-gray-50 transition-colors">
-                                        <div className="bg-blue-100 p-2 rounded-full text-blue-600">
-                                            <Pill className="h-5 w-5" />
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Medicación Actual</p>
-                                            <div className="flex flex-col gap-2 mt-2">
-                                                {medicalRecord?.current_medications?.length ? (
-                                                    medicalRecord.current_medications.map((m: string, i: number) => (
-                                                        <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
-                                                            <div className="h-1.5 w-1.5 bg-blue-400 rounded-full" />
-                                                            {m}
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <span className="text-sm text-gray-500 italic">No hay medicamentos activos</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
+                        {patientId && (
+                            <VitalSignsCard
+                                patientId={patientId}
+                                data={vitalData}
+                                onUpdate={() => {
+                                    // Trigger a re-fetch of the patient data
+                                    const event = new CustomEvent('refreshPatientData');
+                                    window.dispatchEvent(event);
+                                    // Or simply recall the fetch if possible, but for now we rely on parent state update strategy or reload
+                                    // Actually, we can just call fetchPatientData if we move it out or use a trigger
+                                    // Simplest for now: force a reload or pass a callback if we refactor fetchPatientData
+                                    window.location.reload(); // Simple refresh to ensure all syncs up (though we could refine this)
+                                }}
+                            />
+                        )}
 
                         {/* Quick Tip or Info Card */}
                         <div className="bg-primary/10 rounded-xl p-6 border border-primary/20">
                             <h3 className="font-semibold text-secondary mb-2">¿Información incorrecta?</h3>
                             <p className="text-sm text-secondary/80 mb-4">
-                                Si ves algún dato erróneo en tu ficha vital, por favor notifícalo en tu próxima consulta.
+                                Mantén actualizados los datos vitales para un mejor seguimiento clínico.
                             </p>
-                            <Link to="/appointments">
-                                <Button variant="outline" className="w-full border-primary/30 text-primary hover:bg-primary/20 bg-transparent">
-                                    Contactar Especialista
-                                </Button>
-                            </Link>
                         </div>
                     </div>
 
@@ -197,6 +261,52 @@ const MedicalRecord = () => {
                                 <CardTitle className="text-xl text-secondary">Evolución y Consultas</CardTitle>
                             </CardHeader>
                             <CardContent className="p-6">
+                                {isConsultationMode && patientId && (
+                                    <div className="mb-8">
+                                        <MedicalEntryForm
+                                            patientId={patientId}
+                                            appointmentId={appointmentId || undefined}
+                                            onSubmit={async (data) => {
+                                                // If it's a consultation, we want to confirm completion
+                                                if (appointmentId) {
+                                                    setPendingEntryData(data); // Store data to save after confirmation
+                                                    setIsFinishDialogOpen(true);
+                                                } else {
+                                                    // Just save entry (notes, etc)
+                                                    await handleSaveEntry(data);
+                                                }
+                                            }}
+                                            onCancel={() => {
+                                                if (window.confirm("¿Seguro que desea cancelar la consulta actual? Se perderán los datos no guardados.")) {
+                                                    navigate(`/medical-record?id=${patientId}`, { replace: true });
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                )}
+
+                                <AlertDialog open={isFinishDialogOpen} onOpenChange={setIsFinishDialogOpen}>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>¿Finalizar Consulta?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Esta acción guardará la entrada clínica y marcará la cita como <strong>Completada</strong>.
+                                                <br /><br />
+                                                El paciente recibirá una notificación de que su consulta ha finalizado.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel onClick={() => setIsFinishDialogOpen(false)}>Cancelar</AlertDialogCancel>
+                                            <AlertDialogAction onClick={() => {
+                                                if (pendingEntryData) {
+                                                    handleSaveEntry(pendingEntryData, true); // true = complete appointment
+                                                }
+                                                setIsFinishDialogOpen(false);
+                                            }}>Confirmar y Finalizar</AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
+
                                 {history && (
                                     <MedicalHistoryTimeline
                                         history={history}

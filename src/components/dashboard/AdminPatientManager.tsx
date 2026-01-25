@@ -3,66 +3,83 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Loader2, Video, MapPin, DollarSign } from 'lucide-react';
+import { Users, Loader2, Phone, Mail, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-interface AdminAppointmentView {
+interface Patient {
     id: string;
-    start_time: string;
-    is_virtual: boolean;
-    status: string;
-    patient_name: string;
-    patient_email: string;
-    payment_amount: number | null;
-    payment_status: string | null;
+    created_at: string;
+    phone: string | null;
+    gender: string | null;
+    date_of_birth: string | null;
+    profiles?: {
+        full_name: string;
+        email: string;
+    };
 }
 
 export const AdminPatientManager = () => {
-    const [appointments, setAppointments] = useState<AdminAppointmentView[]>([]);
+    const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        fetchAppointments();
+        fetchPatients();
     }, []);
 
-    const fetchAppointments = async () => {
+    const fetchPatients = async () => {
         try {
-            // Using the new view for simpler data access
-            const { data, error } = await supabase
-                .from('admin_appointments_view')
-                .select('*')
-                .order('start_time', { ascending: false })
-                .limit(50);
+            // 1. Fetch patient profiles first
+            const { data: patientsData, error: patientsError } = await supabase
+                .from('patient_profiles')
+                .select('id, created_at, phone, gender, date_of_birth, user_id')
+                .order('created_at', { ascending: false });
 
-            if (error) throw error;
+            if (patientsError) throw patientsError;
 
-            console.log('Appointments data:', data);
-            setAppointments(data || []);
+            if (!patientsData || patientsData.length === 0) {
+                setPatients([]);
+                return;
+            }
+
+            // 2. Extract user IDs to fetch profile details
+            const userIds = patientsData.map(p => p.user_id).filter(Boolean);
+
+            // 3. Fetch corresponding public profiles
+            const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('user_id, full_name, email')
+                .in('user_id', userIds);
+
+            if (profilesError) throw profilesError;
+
+            // 4. Merge data
+            const combinedData = patientsData.map(patient => {
+                const profile = profilesData?.find(p => p.user_id === patient.user_id);
+                return {
+                    ...patient,
+                    profiles: profile ? {
+                        full_name: profile.full_name,
+                        email: profile.email
+                    } : undefined
+                };
+            });
+
+            console.log('Patients data linked:', combinedData);
+            setPatients(combinedData as Patient[]); // Cast to Patient[]
         } catch (error) {
-            console.error('Error fetching appointments:', error);
+            console.error('Error fetching patients:', error);
         } finally {
             setLoading(false);
         }
     };
 
-    const getStatusBadge = (status: string) => {
-        switch (status) {
-            case 'completed': return <Badge className="bg-green-500">Completada</Badge>;
-            case 'pending': return <Badge variant="outline" className="text-yellow-600 border-yellow-600">Pendiente</Badge>;
-            case 'cancelled': return <Badge variant="destructive">Cancelada</Badge>;
-            case 'confirmed': return <Badge className="bg-blue-500">Confirmada</Badge>;
-            default: return <Badge variant="secondary">{status}</Badge>;
-        }
-    };
-
-    const formatCurrency = (amount: number | null) => {
-        if (amount === null) return '$0 COP';
-        return new Intl.NumberFormat('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        }).format(amount);
+    const getAge = (dob: string | null) => {
+        if (!dob) return 'N/A';
+        const birthDate = new Date(dob);
+        const ageDifMs = Date.now() - birthDate.getTime();
+        const ageDate = new Date(ageDifMs);
+        return Math.abs(ageDate.getUTCFullYear() - 1970) + ' años';
     };
 
     return (
@@ -70,10 +87,10 @@ export const AdminPatientManager = () => {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
-                    Gestión de Pacientes y Pagos
+                    Directorio de Pacientes
                 </CardTitle>
                 <CardDescription>
-                    Historial de citas, consultas y pagos realizados por los pacientes.
+                    Listado completo de pacientes registrados en la clínica.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -81,64 +98,57 @@ export const AdminPatientManager = () => {
                     <div className="flex justify-center py-8">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                     </div>
-                ) : appointments.length === 0 ? (
+                ) : patients.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground">
-                        No hay registros de citas recientes.
+                        No hay pacientes registrados.
                     </div>
                 ) : (
                     <div className="rounded-md border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Paciente</TableHead>
-                                    <TableHead>Fecha</TableHead>
-                                    <TableHead>Tipo de Cita</TableHead>
-                                    <TableHead>Estado</TableHead>
-                                    <TableHead>Pago</TableHead>
+                                    <TableHead>Nombre / Email</TableHead>
+                                    <TableHead>Teléfono</TableHead>
+                                    <TableHead>Edad / Género</TableHead>
+                                    <TableHead>Fecha Registro</TableHead>
+                                    <TableHead className="text-right">Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {appointments.map((apt) => (
-                                    <TableRow key={apt.id}>
+                                {patients.map((patient) => (
+                                    <TableRow key={patient.id}>
                                         <TableCell>
-                                            <div className="font-medium">{apt.patient_name || 'Desconocido'}</div>
-                                            <div className="text-xs text-muted-foreground">{apt.patient_email || 'Sin email'}</div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {format(new Date(apt.start_time), "d MMM yyyy, h:mm a", { locale: es })}
-                                        </TableCell>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                {apt.is_virtual ? (
-                                                    <>
-                                                        <Video className="h-4 w-4 text-primary" />
-                                                        <span className="text-sm">Virtual</span>
-                                                    </>
-                                                ) : (
-                                                    <>
-                                                        <MapPin className="h-4 w-4 text-green-600" />
-                                                        <span className="text-sm">Presencial</span>
-                                                    </>
-                                                )}
+                                            <div className="font-medium text-base">
+                                                {patient.profiles?.full_name || 'Desconocido'}
+                                            </div>
+                                            <div className="text-xs text-muted-foreground flex items-center gap-1">
+                                                <Mail className="h-3 w-3" />
+                                                {patient.profiles?.email || 'Sin email'}
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            {getStatusBadge(apt.status)}
+                                            <div className="flex items-center gap-2">
+                                                <Phone className="h-4 w-4 text-gray-500" />
+                                                <span>{patient.phone || 'N/A'}</span>
+                                            </div>
                                         </TableCell>
                                         <TableCell>
-                                            {apt.payment_amount ? (
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold text-green-700 flex items-center gap-1">
-                                                        <DollarSign className="h-3 w-3" />
-                                                        {formatCurrency(apt.payment_amount)}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground capitalize">
-                                                        {apt.payment_status}
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                <span className="text-xs text-muted-foreground italic">Sin pago</span>
-                                            )}
+                                            <div className="flex flex-col text-sm">
+                                                <span>{getAge(patient.date_of_birth)}</span>
+                                                <span className="text-xs text-muted-foreground capitalize">{patient.gender || 'No especificado'}</span>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline">
+                                                {format(new Date(patient.created_at), "d MMM yyyy", { locale: es })}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {/* Future: Add 'View History' button */}
+                                            <Badge variant="secondary" className="cursor-pointer hover:bg-gray-200">
+                                                <FileText className="h-3 w-3 mr-1" />
+                                                Ver Expediente
+                                            </Badge>
                                         </TableCell>
                                     </TableRow>
                                 ))}

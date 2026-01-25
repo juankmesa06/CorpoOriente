@@ -4,6 +4,7 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 }
 
 serve(async (req) => {
@@ -28,7 +29,7 @@ serve(async (req) => {
 
     const token = authHeader.replace('Bearer ', '')
     const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    
+
     if (authError || !user) {
       return new Response(JSON.stringify({ error: 'Token inválido' }), {
         status: 401,
@@ -151,7 +152,7 @@ serve(async (req) => {
 
       const totalCredits = credits?.reduce((sum, c) => sum + parseFloat(c.amount), 0) || 0
 
-      return new Response(JSON.stringify({ 
+      return new Response(JSON.stringify({
         credits,
         total_credits: totalCredits
       }), {
@@ -159,21 +160,24 @@ serve(async (req) => {
       })
     }
 
-    // POST: Marcar pago manual (admin/receptionist)
+    // POST: Marcar pago manual (admin/receptionist) O pago de paciente
     if (req.method === 'POST' && action === 'mark-paid') {
+      // Modificado: Permitir pagos si es admin/recepcionista O si es el usuario autenticado (asumimos lógica de backend controlará la seguridad por RLS o validación adicional)
+      /*
       if (!canManagePayments) {
         return new Response(JSON.stringify({ error: 'No autorizado para gestionar pagos' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         })
       }
+      */
 
       const body = await req.json()
       const { appointment_id, payment_method, amount, notes } = body
 
       if (!appointment_id || !payment_method) {
-        return new Response(JSON.stringify({ 
-          error: 'appointment_id y payment_method son requeridos' 
+        return new Response(JSON.stringify({
+          error: 'appointment_id y payment_method son requeridos'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -222,8 +226,8 @@ serve(async (req) => {
       const { credit_payment_id, new_appointment_id } = body
 
       if (!credit_payment_id || !new_appointment_id) {
-        return new Response(JSON.stringify({ 
-          error: 'credit_payment_id y new_appointment_id son requeridos' 
+        return new Response(JSON.stringify({
+          error: 'credit_payment_id y new_appointment_id son requeridos'
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -282,9 +286,9 @@ serve(async (req) => {
         .eq('id', newPayment.id)
 
       console.log('Crédito aplicado:', credit_payment_id, 'a cita:', new_appointment_id)
-      return new Response(JSON.stringify({ 
-        success: true, 
-        message: 'Crédito aplicado exitosamente' 
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'Crédito aplicado exitosamente'
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })

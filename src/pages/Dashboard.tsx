@@ -13,20 +13,35 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/ca
 export default function Dashboard() {
   const { user, roles, signOut, hasRole } = useAuth();
   const [isProfileIncomplete, setIsProfileIncomplete] = useState(false);
+  const [userName, setUserName] = useState<string>('');
 
   useEffect(() => {
     const checkProfile = async () => {
-      if (user && hasRole('doctor')) {
-        const { data } = await supabase
-          .from('doctor_profiles')
-          .select('bio, specialty')
+      if (user) {
+        // Fetch basic profile info (name)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
           .eq('user_id', user.id)
           .single();
 
-        if (data) {
-          setIsProfileIncomplete(!data.bio || data.specialty === 'General');
-        } else {
-          setIsProfileIncomplete(true);
+        if (profile?.full_name) {
+          setUserName(profile.full_name);
+        }
+
+        // Additional checks for doctors
+        if (hasRole('doctor')) {
+          const { data } = await supabase
+            .from('doctor_profiles')
+            .select('bio, specialty')
+            .eq('user_id', user.id)
+            .single();
+
+          if (data) {
+            setIsProfileIncomplete(!data.bio || data.specialty === 'General');
+          } else {
+            setIsProfileIncomplete(true);
+          }
         }
       }
     };
@@ -60,7 +75,7 @@ export default function Dashboard() {
       {/* Main Content Area */}
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2 tracking-tight">¡Bienvenido, {user?.email?.split('@')[0]}!</h2>
+          <h2 className="text-3xl font-bold mb-2 tracking-tight">¡Bienvenido, {userName || user?.email?.split('@')[0]}!</h2>
           <p className="text-muted-foreground text-lg">
             {hasRole('patient') && !hasRole('doctor') && !hasRole('admin')
               ? "Gestiona tus citas y bienestar emocional."
@@ -69,7 +84,7 @@ export default function Dashboard() {
         </div>
 
         {/* Dynamic Content based on Role */}
-        {hasRole('admin') ? (
+        {(hasRole('admin') || hasRole('super_admin')) ? (
           <AdminDashboard />
         ) : hasRole('doctor') ? (
           <DoctorDashboard isProfileIncomplete={isProfileIncomplete} />

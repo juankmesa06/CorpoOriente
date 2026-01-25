@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Loader2, Stethoscope, UserCircle, UserPlus } from 'lucide-react';
+import { Loader2, Stethoscope, UserCircle, UserPlus, Mail, CheckCircle } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PublicNavbar } from '@/components/PublicNavbar';
 import { Footer } from '@/components/Footer';
@@ -18,11 +19,21 @@ const loginSchema = z.object({
   email: z.string().trim().email({ message: 'Email inválido' }),
   password: z.string().min(6, { message: 'Mínimo 6 caracteres' }),
 });
+// ... (omitting unchanged parts for brevity if possible, but replace_file_content needs context)
+// Actually I will just update the import line and the dialog content part.
+// Splitting into two chunks is safer for replace_file_content if lines are far apart?
+// Auth.tsx is small enough.
+// Let's do imports first.
+
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(2, { message: 'Nombre requerido' }).max(100),
   email: z.string().trim().email({ message: 'Email inválido' }),
-  password: z.string().min(6, { message: 'Mínimo 6 caracteres' }),
+  password: z.string()
+    .min(8, { message: 'Mínimo 8 caracteres' })
+    .regex(/[A-Z]/, { message: 'Al menos una mayúscula' })
+    .regex(/[0-9]/, { message: 'Al menos un número' })
+    .regex(/[^a-zA-Z0-9]/, { message: 'Al menos un carácter especial (@, #, etc)' }),
   confirmPassword: z.string(),
 }).refine(data => data.password === data.confirmPassword, {
   message: 'Las contraseñas no coinciden',
@@ -34,6 +45,7 @@ export default function Auth() {
   const { user, loading, signIn, signUp } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
@@ -46,10 +58,10 @@ export default function Auth() {
 
   // Redirigir si ya está autenticado
   useEffect(() => {
-    if (user && !loading) {
+    if (user && !loading && !showSuccessDialog) {
       navigate('/');
     }
-  }, [user, loading, navigate]);
+  }, [user, loading, navigate, showSuccessDialog]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,8 +129,7 @@ export default function Auth() {
       return;
     }
 
-    toast.success('¡Cuenta creada exitosamente!');
-    navigate('/');
+    setShowSuccessDialog(true);
   };
 
   if (loading) {
@@ -300,6 +311,46 @@ export default function Auth() {
           </CardContent>
         </Card>
       </main >
+
+      {/* Registration Success Dialog */}
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="sm:max-w-md text-center">
+          <DialogHeader className="items-center space-y-4 pt-4">
+            <div className="bg-green-100 p-3 rounded-full">
+              <CheckCircle className="h-10 w-10 text-green-600" />
+            </div>
+            <DialogTitle className="text-2xl font-bold text-green-700">¡Registro Exitoso!</DialogTitle>
+            <DialogDescription className="text-lg text-slate-600">
+              Gracias por unirte al <b>Centro PsicoTerapéutico de Oriente</b>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4 text-slate-600">
+            {/* Removed the paragraph that is now in description to avoid duplicity/nesting issues if any, or keep it. */
+              /* The previous code had <p className="text-lg">... p>. I moved it to DialogDescription. */
+            }
+            <div className="bg-blue-50 p-4 rounded-lg flex items-start gap-3 text-left">
+              <Mail className="h-5 w-5 text-blue-500 mt-1 shrink-0" />
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-blue-900">Verifica tu correo electrónico</p>
+                <p className="text-sm text-blue-700">
+                  Hemos enviado un enlace de confirmación a <b>{signupEmail}</b> for security.
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Por favor revisa tu bandeja de entrada (y la carpeta de Spam) para activar tu cuenta.
+            </p>
+          </div>
+
+          <div className="flex justify-center pt-2">
+            <Button onClick={() => setShowSuccessDialog(false)} className="w-full bg-green-600 hover:bg-green-700">
+              Entendido, ya reviso mi correo
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
 
       <Footer />
     </div >
