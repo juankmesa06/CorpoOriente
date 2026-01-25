@@ -61,19 +61,72 @@ const PatientDashboard = () => {
             console.log('Patient Profile found:', patientProfile);
 
             // 3. Search appointments (LIMIT 3)
-            const { data: appointments, error: aptError } = await supabase
+            const { data: appointmentsRaw, error: aptError } = await supabase
                 .from('appointments')
-                .select('*, rooms(name)')
+                .select('*')
                 .eq('patient_id', patientProfile.id)
                 .in('status', ['confirmed', 'scheduled', 'completed'])
                 .order('start_time', { ascending: false })
-                .limit(3); // LIMIT TO 3
+                .limit(3);
 
             if (aptError) {
                 console.error('Error fetching appointments:', aptError);
             }
 
-            setUpcomingAppointments(appointments || []);
+            // Manually fetch room details if room_id exists
+            let appointments = appointmentsRaw || [];
+            if (appointmentsRaw && appointmentsRaw.length > 0) {
+                const roomIds = appointmentsRaw.map((a: any) => a.room_id).filter(Boolean);
+                if (roomIds.length > 0) {
+                    const { data: roomsData } = await supabase
+                        .from('rooms')
+                        .select('id, name')
+                        .in('id', roomIds);
+
+                    if (roomsData) {
+                        appointments = appointmentsRaw.map((apt: any) => ({
+                            ...apt,
+                            rooms: roomsData.find(r => r.id === apt.room_id)
+                        }));
+                    }
+                }
+            }
+
+            // Also fetch doctor profiles if needed (though current UI might not use it deep, it uses apt.doctor_profiles)
+            // The original query used *, so it didn't fetch doctor_profiles relationship explicitly?
+            // Wait, original query was select('*, rooms(name)')
+            // The UI uses apt.doctor_profiles?.profiles?.full_name.
+            // Star selection (*) DOES NOT fetch relations.
+            // So we need to fetch doctor names too!
+
+            const doctorIds = appointments.map((a: any) => a.doctor_id).filter(Boolean);
+            if (doctorIds.length > 0) {
+                const { data: doctorsData } = await supabase
+                    .from('doctor_profiles')
+                    .select('id, user_id')
+                    .in('id', doctorIds);
+
+                if (doctorsData) {
+                    const userIds = doctorsData.map(d => d.user_id);
+                    const { data: profilesData } = await supabase
+                        .from('profiles')
+                        .select('user_id, full_name')
+                        .in('user_id', userIds);
+
+                    appointments = appointments.map((apt: any) => {
+                        const doctor = doctorsData.find(d => d.id === apt.doctor_id);
+                        const profile = doctor ? profilesData?.find(p => p.user_id === doctor.user_id) : null;
+                        return {
+                            ...apt,
+                            doctor_profiles: {
+                                profiles: profile ? { full_name: profile.full_name } : undefined
+                            }
+                        };
+                    });
+                }
+            }
+
+            setUpcomingAppointments(appointments);
 
             // 4. Search medical records
             const { data: medicalRecord } = await supabase

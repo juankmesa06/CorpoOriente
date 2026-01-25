@@ -12,7 +12,7 @@ import {
     Banknote
 } from 'lucide-react';
 import { RoomManagement } from './RoomManagement';
-import { RoomReports } from './RoomReports';
+
 import { DoctorAffiliationManager } from './DoctorAffiliationManager';
 import { AdminPatientManager } from './AdminPatientManager';
 import { AdminRoleManager } from './AdminRoleManager';
@@ -71,11 +71,10 @@ const AdminDashboard = () => {
                 return (
                     <div className="space-y-6">
                         <div>
-                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Cobros a Médicos y Afiliaciones</h2>
+                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Médicos</h2>
                             <p className="text-muted-foreground">Gestiona las membresías de especialistas y el uso de espacios.</p>
                         </div>
                         <DoctorAffiliationManager />
-                        <RoomReports />
                     </div>
                 );
             case 'users':
@@ -130,7 +129,7 @@ const AdminDashboard = () => {
                     <nav className="space-y-1">
                         <NavItem section="spaces" label="Centro de Control" icon={Building2} />
                         <NavItem section="payments" label="Gestión de Cobros" icon={Banknote} />
-                        <NavItem section="doctor-billing" label="Cobros a Médicos" icon={Stethoscope} />
+                        <NavItem section="doctor-billing" label="Gestión de Médicos" icon={Stethoscope} />
                         <NavItem section="users" label="Gestión de Pacientes" icon={Users} />
 
                         {isSuperAdmin && (

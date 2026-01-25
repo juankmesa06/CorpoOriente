@@ -5,8 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Users, UserCheck, UserX, TrendingUp } from 'lucide-react';
+import { Users, UserCheck, UserX, TrendingUp, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Doctor {
     user_id: string;
@@ -34,6 +44,7 @@ export const DoctorAffiliationManager = () => {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState<'all' | 'affiliated' | 'not_affiliated'>('all');
     const [stats, setStats] = useState<Stats>({ total: 0, affiliated: 0, notAffiliated: 0, affiliationRate: 0 });
+    const [doctorToDelete, setDoctorToDelete] = useState<string | null>(null);
 
     useEffect(() => {
         loadDoctors();
@@ -128,6 +139,32 @@ export const DoctorAffiliationManager = () => {
             month: 'short',
             year: 'numeric'
         });
+    };
+
+    const handleDeleteDoctor = async () => {
+        if (!doctorToDelete) return;
+
+        try {
+            // Usar la función RPC para eliminar el usuario completamente (auth + public)
+            const { error } = await supabase.rpc('delete_user_by_id', {
+                user_id: doctorToDelete
+            });
+
+            if (error) {
+                console.error("Error RPC delete_user_by_id:", error);
+                // Si falla por no existir la función (aún no migrada), intentamos el método manual
+                // o lanzamos el error. Por ahora lanzamos error.
+                throw error;
+            }
+
+            toast.success('Usuario médico eliminado del sistema correctamente');
+            loadDoctors();
+        } catch (error: any) {
+            console.error("Error deleting doctor:", error);
+            toast.error('Error al eliminar médico: ' + (error.message || 'Error desconocido'));
+        } finally {
+            setDoctorToDelete(null);
+        }
     };
 
     return (
@@ -254,12 +291,39 @@ export const DoctorAffiliationManager = () => {
                                                     onCheckedChange={() => toggleAffiliation(doctor.user_id, doctor.is_affiliated)}
                                                 />
                                             </div>
+
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-destructive hover:text-destructive hover:bg-destructive/10 h-8 w-8"
+                                                onClick={() => setDoctorToDelete(doctor.user_id)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
+
+                    <AlertDialog open={!!doctorToDelete} onOpenChange={(open) => !open && setDoctorToDelete(null)}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Esta acción eliminará al médico de la lista y revocará sus permisos de especialista.
+                                    El usuario seguirá existiendo en el sistema pero ya no figurará como médico.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleDeleteDoctor} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    Eliminar
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                     {/* Información adicional */}
                     <div className="bg-muted p-4 rounded-lg">

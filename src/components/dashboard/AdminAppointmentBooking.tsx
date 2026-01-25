@@ -60,7 +60,7 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
 
             const { data: doctorsData, error: doctorsError } = await supabase
                 .from('doctor_profiles')
-                .select('id, profiles!doctor_profiles_user_id_fkey(full_name), specialty')
+                .select('id, user_id, specialty')
                 .order('created_at', { ascending: false });
 
             if (doctorsError) {
@@ -69,10 +69,19 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
             }
 
             if (doctorsData) {
-                setDoctors(doctorsData.map(d => ({
-                    id: d.id,
-                    label: `Dr. ${d.profiles?.full_name} - ${d.specialty}`
-                })));
+                const doctorUserIds = doctorsData.map(d => d.user_id);
+                const { data: profilesData } = await supabase
+                    .from('profiles')
+                    .select('user_id, full_name')
+                    .in('user_id', doctorUserIds);
+
+                setDoctors(doctorsData.map(d => {
+                    const profile = profilesData?.find(p => p.user_id === d.user_id);
+                    return {
+                        id: d.id,
+                        label: `Dr. ${profile?.full_name || 'Desconocido'} - ${d.specialty}`
+                    };
+                }));
             }
 
             fetchAppointments();
@@ -90,15 +99,13 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
                     start_time,
                     status,
                     is_virtual,
+                    patient_id,
+                    doctor_id,
                     patient_profiles (
-                        profiles (
-                            full_name
-                        )
+                        user_id
                     ),
                     doctor_profiles (
-                        profiles:profiles!doctor_profiles_user_id_fkey (
-                            full_name
-                        )
+                        user_id
                     ),
                     payments (
                         amount,
@@ -111,10 +118,45 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
             if (typeFilter === "virtual") query = query.eq('is_virtual', true);
             if (typeFilter === "presencial") query = query.eq('is_virtual', false);
 
-            const { data, error } = await query;
+            const { data: appointments, error } = await query;
 
             if (error) throw error;
-            setAppointmentsList(data || []);
+
+            if (!appointments) {
+                setAppointmentsList([]);
+                return;
+            }
+
+            // Extract user IDs for patients and doctors
+            const patientUserIds = appointments.map((a: any) => a.patient_profiles?.user_id).filter(Boolean);
+            const doctorUserIds = appointments.map((a: any) => a.doctor_profiles?.user_id).filter(Boolean);
+            const allUserIds = [...new Set([...patientUserIds, ...doctorUserIds])];
+
+            // Fetch profiles
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('user_id, full_name')
+                .in('user_id', allUserIds);
+
+            const processedAppointments = appointments.map((apt: any) => {
+                const patientUserId = apt.patient_profiles?.user_id;
+                const doctorUserId = apt.doctor_profiles?.user_id;
+
+                const patientProfile = profiles?.find(p => p.user_id === patientUserId);
+                const doctorProfile = profiles?.find(p => p.user_id === doctorUserId);
+
+                return {
+                    ...apt,
+                    patient_profiles: {
+                        profiles: patientProfile ? { full_name: patientProfile.full_name } : undefined
+                    },
+                    doctor_profiles: {
+                        profiles: doctorProfile ? { full_name: doctorProfile.full_name } : undefined
+                    }
+                };
+            });
+
+            setAppointmentsList(processedAppointments);
         } catch (error: any) {
             console.error('Error fetching appointments:', error);
             toast.error("Error al cargar citas: " + error.message);

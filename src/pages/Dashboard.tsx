@@ -75,7 +75,7 @@ export default function Dashboard() {
       {/* Main Content Area */}
       <main className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2 tracking-tight">¡Bienvenido, {userName || user?.email?.split('@')[0]}!</h2>
+          <h2 className="text-3xl font-bold mb-2 tracking-tight">¡Bienvenido, {roles.includes('super_admin') ? 'Super Admin' : (userName || user?.email?.split('@')[0])}!</h2>
           <p className="text-muted-foreground text-lg">
             {hasRole('patient') && !hasRole('doctor') && !hasRole('admin')
               ? "Gestiona tus citas y bienestar emocional."

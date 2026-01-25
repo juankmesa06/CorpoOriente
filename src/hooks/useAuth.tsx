@@ -3,7 +3,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
 // Tipos para roles
-type AppRole = 'admin' | 'receptionist' | 'doctor' | 'patient';
+type AppRole = 'admin' | 'receptionist' | 'doctor' | 'patient' | 'super_admin';
 
 interface AuthContextType {
   user: User | null;

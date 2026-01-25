@@ -65,25 +65,29 @@ export const Navbar = () => {
                         <LayoutDashboard className="h-4 w-4" />
                         Dashboard
                     </Link>
-                    <Link to="/appointments" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
-                        <Calendar className="h-4 w-4" />
-                        {hasRole('patient') ? 'Mis Citas' : 'Agenda'}
-                    </Link>
+                    {!roles.includes('super_admin') && (
+                        <>
+                            <Link to="/appointments" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
+                                <Calendar className="h-4 w-4" />
+                                {hasRole('patient') ? 'Mis Citas' : 'Agenda'}
+                            </Link>
 
-                    <Link to="/settings" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
-                        <Settings className="h-4 w-4" />
-                        Configuración
-                    </Link>
+                            <Link to="/settings" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
+                                <Settings className="h-4 w-4" />
+                                Configuración
+                            </Link>
+                        </>
+                    )}
                 </nav>
 
                 <div className="flex items-center gap-4">
                     <div className="hidden md:flex items-center gap-2">
                         <UserCircle className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm font-medium">{userName || user?.email?.split('@')[0]}</span>
+                        <span className="text-sm font-medium">{roles.includes('super_admin') ? 'Super Admin' : (userName || user?.email?.split('@')[0])}</span>
                     </div>
                     <div className="flex gap-1">
                         {roles
-                            .filter(role => !(role === 'doctor' && roles.includes('admin')))
+                            .filter(role => !(role === 'doctor' && (roles.includes('admin') || roles.includes('super_admin'))))
                             .map(role => (
                                 <Badge key={role} variant={getRoleBadgeVariant(role)} className="text-[10px] px-2 py-0">
                                     {getRoleLabel(role)}

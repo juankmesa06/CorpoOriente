@@ -166,32 +166,12 @@ export const RoomManagement = () => {
     const fetchAppointments = async () => {
         setFetchingAppointments(true);
         try {
+            // 1. Fetch raw appointments using wildcard to avoid "column does not exist" errors
             let query = supabase
                 .from('appointments')
-                .select(`
-                    id,
-                    start_time,
-                    status,
-                    is_virtual,
-                    rental_id,
-                    rooms ( name ),
-                    patient_profiles (
-                        profiles (
-                            full_name
-                        )
-                    ),
-                    doctor_profiles (
-                        profiles:profiles!doctor_profiles_user_id_fkey (
-                            full_name
-                        )
-                    ),
-                    payments (
-                        amount,
-                        status
-                    )
-                `)
+                .select('*')
                 .order('start_time', { ascending: false })
-                .limit(30);
+                .limit(50);
 
             if (typeFilter === "virtual") query = query.eq('is_virtual', true);
             if (typeFilter === "presencial") query = query.eq('is_virtual', false);
@@ -199,27 +179,104 @@ export const RoomManagement = () => {
             const { data: apts, error: aptError } = await query;
             if (aptError) throw aptError;
 
-            // Fetch related rentals manually to avoid join cache issues
-            const rentalIds = apts?.map(a => a.rental_id).filter(Boolean);
-            let rentals: any[] = [];
-
-            if (rentalIds && rentalIds.length > 0) {
-                const { data: rentalData } = await supabase
-                    .from('room_rentals')
-                    .select('id, total_price, status, rooms ( name )')
-                    .in('id', rentalIds);
-                rentals = rentalData || [];
+            if (!apts || apts.length === 0) {
+                setAppointmentsList([]);
+                return;
             }
 
-            // Stitch data
-            const stitchedApts = apts?.map(a => ({
-                ...a,
-                room_rentals: rentals.find(r => r.id === a.rental_id) || null
-            }));
+            // 2. Collect IDs (safely handling potential missing columns)
+            const appointmentIds = apts.map(a => a.id);
+            const patientIds = [...new Set(apts.map(a => a.patient_id).filter(Boolean))];
+            const doctorIds = [...new Set(apts.map(a => a.doctor_id).filter(Boolean))];
 
-            setAppointmentsList(stitchedApts || []);
+            // Check if room_id and rental_id exist in the returned data
+            const roomIdsFromApts = apts.map((a: any) => a.room_id).filter(Boolean);
+            const rentalIds = apts.map((a: any) => a.rental_id).filter(Boolean);
+
+            // 3. Fetch related data in parallel
+            const [
+                { data: patientProfiles },
+                { data: doctorProfiles },
+                { data: payments },
+                { data: rentals },
+                { data: directRooms }
+            ] = await Promise.all([
+                patientIds.length > 0 ? supabase.from('patient_profiles').select('id, user_id').in('id', patientIds) : Promise.resolve({ data: [] }),
+                doctorIds.length > 0 ? supabase.from('doctor_profiles').select('id, user_id').in('id', doctorIds) : Promise.resolve({ data: [] }),
+                supabase.from('payments').select('appointment_id, amount, status').in('appointment_id', appointmentIds),
+                rentalIds.length > 0 ? supabase.from('room_rentals').select('id, room_id').in('id', rentalIds) : Promise.resolve({ data: [] }),
+                roomIdsFromApts.length > 0 ? supabase.from('rooms').select('id, name').in('id', roomIdsFromApts) : Promise.resolve({ data: [] })
+            ]);
+
+            // 4. Fetch Names from Profiles (using user_ids)
+            const pUserIds = (patientProfiles as any[])?.map((p: any) => p.user_id) || [];
+            const dUserIds = (doctorProfiles as any[])?.map((d: any) => d.user_id) || [];
+            const allUserIds = [...new Set([...pUserIds, ...dUserIds])];
+
+            let userProfiles: any[] = [];
+            if (allUserIds.length > 0) {
+                const { data } = await supabase.from('profiles').select('user_id, full_name').in('user_id', allUserIds);
+                userProfiles = data || [];
+            }
+
+            // 5. Fetch Rooms for Rentals (if any rentals linked)
+            const rentalRoomIds = (rentals as any[])?.map((r: any) => r.room_id).filter(Boolean) || [];
+            const missingRoomIds = rentalRoomIds.filter(id => !(directRooms as any[])?.find((r: any) => r.id === id));
+
+            let extraRooms: any[] = [];
+            if (missingRoomIds.length > 0) {
+                const { data } = await supabase.from('rooms').select('id, name').in('id', missingRoomIds);
+                extraRooms = data || [];
+            }
+
+            const allRooms = [...(directRooms || []), ...extraRooms];
+
+            // 6. Stitch and Flatten Data for Display
+            const processed = apts.map((apt: any) => {
+                // Find Patient Name
+                const pProfile = (patientProfiles as any[])?.find((p: any) => p.id === apt.patient_id);
+                const pName = pProfile ? userProfiles.find(u => u.user_id === pProfile.user_id)?.full_name : 'Desconocido';
+
+                // Find Doctor Name
+                const dProfile = (doctorProfiles as any[])?.find((d: any) => d.id === apt.doctor_id);
+                const dName = dProfile ? userProfiles.find(u => u.user_id === dProfile.user_id)?.full_name : 'Desconocido';
+
+                // Find Payment
+                const payment = (payments as any[])?.find((p: any) => p.appointment_id === apt.id);
+                const paymentStatus = payment?.status || 'pending';
+                const paymentAmount = payment?.amount || 0;
+
+                // Find Room Name
+                let roomName = '---';
+                if (apt.room_id) {
+                    const r = allRooms.find((r: any) => r.id === apt.room_id);
+                    if (r) roomName = r.name;
+                } else if (apt.rental_id) {
+                    const rental = (rentals as any[])?.find((r: any) => r.id === apt.rental_id);
+                    if (rental) {
+                        const r = allRooms.find((room: any) => room.id === rental.room_id);
+                        if (r) roomName = r.name;
+                    }
+                }
+
+                // Return a flat structure compatible with our display logic
+                return {
+                    ...apt,
+                    patient_name: pName,
+                    doctor_name: dName,
+                    room_name: roomName,
+                    payment_status: paymentStatus,
+                    total_amount: paymentAmount,
+                    // Keep original objects just in case
+                    payments: payment ? [payment] : []
+                };
+            });
+
+            setAppointmentsList(processed);
+
         } catch (error: any) {
             console.error('Error fetching appointments:', error);
+            toast.error("Error al cargar citas: " + (error.message || "Error desconocido"));
         } finally {
             setFetchingAppointments(false);
         }
@@ -852,60 +909,56 @@ export const RoomManagement = () => {
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-sm">
-                                                    {apt.patient_profiles?.profiles?.full_name || 'Desconocido'}
+                                                    {apt.patient_name || 'Desconocido'}
                                                 </TableCell>
                                                 <TableCell className="text-sm">
-                                                    {apt.doctor_profiles?.profiles?.full_name || 'Desconocido'}
+                                                    {apt.doctor_name || 'Desconocido'}
                                                 </TableCell>
                                                 <TableCell className="text-sm font-medium text-slate-700">
-                                                    {(() => {
-                                                        const roomName = apt.rooms?.name ||
-                                                            (Array.isArray(apt.room_rentals) ? apt.room_rentals[0]?.rooms?.name : apt.room_rentals?.rooms?.name);
-
-                                                        if (roomName) {
-                                                            return (
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <Building2 className="h-3.5 w-3.5 text-primary/60" />
-                                                                    {roomName}
-                                                                </div>
-                                                            );
-                                                        }
-                                                        if (apt.is_virtual) {
-                                                            return (
-                                                                <div className="flex items-center gap-1.5 text-emerald-600">
-                                                                    <Video className="h-3.5 w-3.5" />
-                                                                    Virtual
-                                                                </div>
-                                                            );
-                                                        }
-                                                        return <span className="text-slate-400 italic text-xs">No asignado</span>;
-                                                    })()}
+                                                    {apt.room_name && apt.room_name !== '---' ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Building2 className="h-3.5 w-3.5 text-primary/60" />
+                                                            {apt.room_name}
+                                                        </div>
+                                                    ) : apt.is_virtual ? (
+                                                        <div className="flex items-center gap-1.5 text-emerald-600">
+                                                            <Video className="h-3.5 w-3.5" />
+                                                            Virtual
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic text-xs">No asignado</span>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100 text-[10px]">Confirmada</Badge>
+                                                    <Badge variant="outline" className={cn(
+                                                        "text-[10px]",
+                                                        apt.status === 'confirmed' ? "bg-green-50 text-green-700 border-green-100" :
+                                                            apt.status === 'cancelled' ? "bg-red-50 text-red-700 border-red-100" :
+                                                                "bg-slate-50 text-slate-500 border-slate-100"
+                                                    )}>
+                                                        {apt.status === 'confirmed' ? 'Confirmada' : apt.status === 'cancelled' ? 'Cancelada' : apt.status}
+                                                    </Badge>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex flex-col gap-0.5">
                                                         {(() => {
-                                                            const paymentSum = apt.payments?.reduce((sum: number, p: any) => sum + (p.amount || 0), 0) || 0;
-                                                            const rentalPrice = Array.isArray(apt.room_rentals) ? (apt.room_rentals[0]?.total_price || 0) : (apt.room_rentals?.total_price || 0);
-                                                            const total = paymentSum + Number(rentalPrice);
+                                                            const isPaid = apt.payment_status === 'paid' || apt.payment_status === 'confirmed';
+                                                            const amount = apt.total_amount || 0;
 
                                                             return (
                                                                 <>
                                                                     <Badge className={cn(
                                                                         "text-[10px] w-fit",
-                                                                        total > 0 ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-slate-50 text-slate-500 border-slate-100"
+                                                                        isPaid ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-slate-50 text-slate-500 border-slate-100"
                                                                     )}>
-                                                                        {(paymentSum > 0 || (rentalPrice > 0 && (Array.isArray(apt.room_rentals) ? apt.room_rentals[0]?.status === 'confirmed' : apt.room_rentals?.status === 'confirmed'))) ? (
+                                                                        {isPaid ? (
                                                                             <><CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Pagado</>
                                                                         ) : (
                                                                             <><Clock className="h-2.5 w-2.5 mr-1" /> Pendiente</>
                                                                         )}
                                                                     </Badge>
-                                                                    <span className="text-[10px] font-bold text-slate-700">${total.toLocaleString()}</span>
-                                                                    {total > 0 && Number(rentalPrice) > 0 && (
-                                                                        <span className="text-[9px] text-muted-foreground">Incl. Alquiler</span>
+                                                                    {amount > 0 && (
+                                                                        <span className="text-[10px] font-bold text-slate-700">${amount.toLocaleString()}</span>
                                                                     )}
                                                                 </>
                                                             );
@@ -924,3 +977,4 @@ export const RoomManagement = () => {
         </div>
     );
 };
+
