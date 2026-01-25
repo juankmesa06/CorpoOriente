@@ -46,10 +46,24 @@ export const AdminRoleManager = () => {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [userToDelete, setUserToDelete] = useState<UserRole | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [currentUserRole, setCurrentUserRole] = useState<string>('');
 
     useEffect(() => {
+        fetchCurrentUserRole();
         fetchRoles();
     }, []);
+
+    const fetchCurrentUserRole = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            const { data } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', user.id)
+                .single();
+            if (data) setCurrentUserRole(data.role);
+        }
+    };
 
     useEffect(() => {
         if (!searchTerm) {
@@ -103,29 +117,63 @@ export const AdminRoleManager = () => {
         }
     };
 
-    const updateUserRole = async (userId: string, newRole: string) => {
+    const updateUserRole = async (userId: string, currentRole: string, newRole: string) => {
+        // Validation: Only Super Admin can promote/demote other Super Admins
+        if (currentRole === 'super_admin' && currentUserRole !== 'super_admin') {
+            toast.error('Solo un Super Admin puede modificar a otro Super Admin');
+            return;
+        }
+
         try {
-            const { error } = await supabase
+            // First try to update
+            const { error: updateError } = await supabase
                 .from('user_roles')
-                .update({ role: newRole })
-                .eq('user_id', userId);
+                .update({ role: newRole as any })
+                .match({ user_id: userId, role: currentRole }); // Target specific role entry
 
-            if (error) throw error;
+            if (updateError) {
+                // If conflict (409), it means user already has this 'newRole'.
+                // So effectively we should just DELETE the 'currentRole' row to avoid duplicates.
+                if (updateError.code === '23505' || updateError.message?.includes('duplicate key') || (updateError as any).status === 409) {
+                    console.log('Role conflict detected, merging roles by deleting old one...');
 
-            setRoles(roles.map(r => r.user_id === userId ? { ...r, role: newRole as any } : r));
-            toast.success('Rol actualizado correctamente');
-        } catch (error) {
+                    const { error: deleteError } = await supabase
+                        .from('user_roles')
+                        .delete()
+                        .match({ user_id: userId, role: currentRole });
+
+                    if (deleteError) throw deleteError;
+
+                    toast.success('Roles fusionados correctamente');
+                } else {
+                    throw updateError;
+                }
+            } else {
+                toast.success('Rol actualizado correctamente');
+            }
+
+            // Refresh to ensure consistent state
+            fetchRoles();
+
+        } catch (error: any) {
             console.error('Error updating role:', error);
-            toast.error('Error al actualizar el rol');
+            toast.error('Error al actualizar: ' + (error.message || 'Conflicto de roles'));
         }
     };
 
     const handleDeleteUser = async () => {
         if (!userToDelete?.user_id) return;
 
+        // Extra safety check
+        if (currentUserRole !== 'super_admin') {
+            toast.error("No tienes permisos para eliminar usuarios permanentemente.");
+            return;
+        }
+
         setIsDeleting(true);
         try {
-            const { error } = await supabase.rpc('delete_user_by_id', {
+            // Using 'as any' for RPC name because types might not be fully generated for the new function yet
+            const { error } = await supabase.rpc('delete_user_by_id' as any, {
                 user_id: userToDelete.user_id
             });
 
@@ -179,7 +227,7 @@ export const AdminRoleManager = () => {
             <div className="space-y-6">
                 <div className="flex justify-between items-end">
                     <div>
-                        <h3 className="text-2xl font-bold tracking-tight text-slate-900">Gestión de Roles y Permisos</h3>
+                        <h3 className="text-2xl font-bold tracking-tight text-slate-900">Gestión de Usuarios y Roles</h3>
                         <p className="text-sm text-muted-foreground mt-1">Control de acceso y administración de usuarios del sistema.</p>
                     </div>
                     <div className="relative w-72">
@@ -221,7 +269,7 @@ export const AdminRoleManager = () => {
                                     </TableRow>
                                 ) : (
                                     filteredRoles.map((userRole) => (
-                                        <TableRow key={userRole.user_id} className="group hover:bg-slate-50/50 transition-colors">
+                                        <TableRow key={`${userRole.user_id}-${userRole.role}`} className="group hover:bg-slate-50/50 transition-colors">
                                             <TableCell>
                                                 <div className="flex items-center gap-3">
                                                     <Avatar className="h-9 w-9 border border-slate-200">
@@ -251,7 +299,7 @@ export const AdminRoleManager = () => {
                                                 <div className="flex justify-end items-center gap-2">
                                                     <Select
                                                         defaultValue={userRole.role}
-                                                        onValueChange={(val) => updateUserRole(userRole.user_id, val)}
+                                                        onValueChange={(val) => updateUserRole(userRole.user_id, userRole.role, val)}
                                                         disabled={userRole.role === 'super_admin'}
                                                     >
                                                         <SelectTrigger className="w-[160px] h-8 text-xs bg-white">
@@ -265,18 +313,20 @@ export const AdminRoleManager = () => {
                                                         </SelectContent>
                                                     </Select>
 
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
-                                                        disabled={userRole.role === 'super_admin'}
-                                                        onClick={() => {
-                                                            setUserToDelete(userRole);
-                                                            setDeleteDialogOpen(true);
-                                                        }}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                    {currentUserRole === 'super_admin' && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100"
+                                                            disabled={userRole.role === 'super_admin'}
+                                                            onClick={() => {
+                                                                setUserToDelete(userRole);
+                                                                setDeleteDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                         </TableRow>

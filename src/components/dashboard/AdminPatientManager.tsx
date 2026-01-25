@@ -4,10 +4,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Loader2, Phone, Mail, FileText, Trash2, AlertTriangle } from 'lucide-react';
+import { Users, Loader2, Phone, Mail, FileText, Trash2, AlertTriangle, MessageCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -40,6 +41,10 @@ export const AdminPatientManager = () => {
     const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
     const [selectedPatientName, setSelectedPatientName] = useState<string>('');
     const [isRecordsOpen, setIsRecordsOpen] = useState(false);
+    const { roles } = useAuth();
+
+    // Check if current user is super admin
+    const isSuperAdmin = roles.includes('super_admin');
 
     // Deletion State
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -137,14 +142,16 @@ export const AdminPatientManager = () => {
 
     return (
         <>
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Users className="h-5 w-5" />
+            <Card className="border-slate-200 shadow-sm">
+                <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                        <Users className="h-5 w-5 text-blue-600" />
                         Directorio de Pacientes
                     </CardTitle>
                     <CardDescription>
-                        Listado completo de pacientes registrados en la clínica.
+                        {isSuperAdmin
+                            ? "Gestión completa de pacientes (Super Admin)"
+                            : "Listado completo de pacientes registrados en la clínica"}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -199,31 +206,71 @@ export const AdminPatientManager = () => {
                                             </TableCell>
                                             <TableCell className="text-right">
                                                 <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        variant="secondary"
-                                                        size="sm"
-                                                        className="h-8"
-                                                        onClick={() => {
-                                                            setSelectedPatientId(patient.id);
-                                                            setSelectedPatientName(patient.profiles?.full_name || 'Paciente');
-                                                            setIsRecordsOpen(true);
-                                                        }}
-                                                    >
-                                                        <FileText className="h-3 w-3 mr-1" />
-                                                        Expediente
-                                                    </Button>
+                                                    {/* For receptionist: WhatsApp and Call buttons */}
+                                                    {roles.includes('receptionist') && !roles.includes('admin') && !roles.includes('super_admin') ? (
+                                                        <>
+                                                            {/* WhatsApp Button */}
+                                                            {patient.phone && (
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-8 bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                                                                    onClick={() => {
+                                                                        const phone = patient.phone?.replace(/\D/g, '');
+                                                                        window.open(`https://wa.me/${phone}`, '_blank');
+                                                                    }}
+                                                                >
+                                                                    <MessageCircle className="h-3 w-3 mr-1" />
+                                                                    WhatsApp
+                                                                </Button>
+                                                            )}
 
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                                        onClick={() => {
-                                                            setPatientToDelete(patient);
-                                                            setDeleteDialogOpen(true);
-                                                        }}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                            {/* Call Button */}
+                                                            {patient.phone && (
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="h-8 bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+                                                                    onClick={() => {
+                                                                        window.location.href = `tel:${patient.phone}`;
+                                                                    }}
+                                                                >
+                                                                    <Phone className="h-3 w-3 mr-1" />
+                                                                    Llamar
+                                                                </Button>
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        /* For admin/super_admin: Medical Record button */
+                                                        <Button
+                                                            variant="secondary"
+                                                            size="sm"
+                                                            className="h-8"
+                                                            onClick={() => {
+                                                                setSelectedPatientId(patient.id);
+                                                                setSelectedPatientName(patient.profiles?.full_name || 'Paciente');
+                                                                setIsRecordsOpen(true);
+                                                            }}
+                                                        >
+                                                            <FileText className="h-3 w-3 mr-1" />
+                                                            Expediente
+                                                        </Button>
+                                                    )}
+
+                                                    {/* Delete button - only for super admin */}
+                                                    {isSuperAdmin && (
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                            onClick={() => {
+                                                                setPatientToDelete(patient);
+                                                                setDeleteDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -251,16 +298,22 @@ export const AdminPatientManager = () => {
                         </AlertDialogTitle>
                         <AlertDialogDescription className="space-y-3">
                             <p>
-                                Estás a punto de eliminar a <strong>{patientToDelete?.profiles?.full_name || 'este usuario'}</strong> del sistema.
+                                Estás a punto de eliminar permanentemente a <strong>{patientToDelete?.profiles?.full_name || 'este usuario'}</strong> del sistema.
                             </p>
                             <div className="bg-red-50 p-3 rounded-md text-sm text-red-800 border border-red-200">
-                                <strong>Advertencia:</strong> Esta acción es irreversible. Se eliminará:
+                                <strong>⚠️ Advertencia:</strong> Esta acción es irreversible. Se eliminará:
                                 <ul className="list-disc pl-5 mt-1 space-y-1">
-                                    <li>La cuenta de usuario y acceso.</li>
-                                    <li>Perfil de paciente y datos personales.</li>
-                                    <li>Historial de citas y expedientes médicos.</li>
+                                    <li>La cuenta de usuario y acceso</li>
+                                    <li>Perfil de paciente y datos personales</li>
+                                    <li>Historial de citas y expedientes médicos</li>
+                                    <li>Todos los registros asociados</li>
                                 </ul>
                             </div>
+                            {!isSuperAdmin && (
+                                <p className="text-xs text-muted-foreground">
+                                    ℹ️ Solo el Super Admin puede eliminar pacientes del sistema
+                                </p>
+                            )}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

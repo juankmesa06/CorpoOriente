@@ -135,8 +135,8 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
             if (hasRole('patient')) {
                 // Pacientes solo ven salones de eventos
                 filteredRooms = filteredRooms.filter(room => room.room_type === 'event_hall');
-            } else if (hasRole('doctor')) {
-                // Médicos ven TODO
+            } else if (hasRole('doctor') || hasRole('receptionist')) {
+                // Médicos y recepcionistas ven TODO
                 filteredRooms = filteredRooms;
             } else {
                 // Otros roles no pueden alquilar
@@ -390,6 +390,7 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
                     <CardDescription>
                         {hasRole('patient') && 'Reserva salones de eventos para talleres y actividades grupales'}
                         {hasRole('doctor') && 'Reserva consultorios, salones o espacios virtuales para tus necesidades profesionales'}
+                        {hasRole('receptionist') && 'Gestiona reservas de espacios para médicos y pacientes'}
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

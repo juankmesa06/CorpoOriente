@@ -65,7 +65,7 @@ export const Navbar = () => {
                         <LayoutDashboard className="h-4 w-4" />
                         Dashboard
                     </Link>
-                    {!roles.includes('super_admin') && (
+                    {!roles.includes('super_admin') && !roles.includes('admin') && !roles.includes('receptionist') && (
                         <>
                             <Link to="/appointments" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
                                 <Calendar className="h-4 w-4" />
@@ -83,7 +83,7 @@ export const Navbar = () => {
                 <div className="flex items-center gap-4">
                     <div className="hidden md:flex items-center gap-2">
                         <UserCircle className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm font-medium">{roles.includes('super_admin') ? 'Super Admin' : (userName || user?.email?.split('@')[0])}</span>
+                        <span className="text-sm font-medium">{roles.includes('super_admin') ? 'Super Admin' : (roles.includes('admin') ? 'Administrador' : (userName || user?.email?.split('@')[0]))}</span>
                     </div>
                     <div className="flex gap-1">
                         {roles

@@ -78,9 +78,10 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
                 setPatientNames(namesMap);
 
                 // 2. Fetch Appointments
+                // Refactored to avoid 400 error on join
                 const { data } = await supabase
                     .from('appointments')
-                    .select('*, room_rentals(id)')
+                    .select('*')
                     .eq('doctor_id', doctorProfile.id)
                     .gte('start_time', new Date().toISOString())
                     .neq('status', 'completed')
@@ -88,7 +89,15 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
                     .order('start_time', { ascending: true })
                     .limit(5);
 
-                setUpcomingAppointments(data || []);
+                const appointmentsWithRentals = data?.map((apt: any) => ({
+                    ...apt,
+                    // If rental_id is present, we consider it rented.
+                    // We mock the nested object for existing logic compatibility if strictly needed,
+                    // but the UI logic `apt.rental_id || ...` handles it naturally.
+                    room_rentals: apt.rental_id ? [{ id: apt.rental_id }] : []
+                })) || [];
+
+                setUpcomingAppointments(appointmentsWithRentals);
 
                 // 3. Fetch Real Weekly Stats
                 const sevenDaysAgo = new Date();

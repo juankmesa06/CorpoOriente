@@ -1,72 +1,195 @@
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { DollarSign, TrendingUp, CreditCard, Wallet } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { DollarSign, TrendingUp, CreditCard, Wallet, CalendarDays, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
 
-const mockData = [
-    { name: 'Ene', income: 4000 },
-    { name: 'Feb', income: 3000 },
-    { name: 'Mar', income: 2000 },
-    { name: 'Abr', income: 2780 },
-    { name: 'May', income: 1890 },
-    { name: 'Jun', income: 2390 },
+// Mock Data - Monthly
+const monthlyData = [
+    { name: 'Ene', income: 4000, expenses: 2400 },
+    { name: 'Feb', income: 3000, expenses: 1398 },
+    { name: 'Mar', income: 2000, expenses: 9800 },
+    { name: 'Abr', income: 2780, expenses: 3908 },
+    { name: 'May', income: 1890, expenses: 4800 },
+    { name: 'Jun', income: 2390, expenses: 3800 },
+];
+
+// Mock Data - Daily (Last 14 days)
+const dailyData = Array.from({ length: 14 }, (_, i) => ({
+    name: `Día ${i + 1}`,
+    amount: Math.floor(Math.random() * 500) + 100,
+}));
+
+// Mock Transactions
+const transactions = [
+    { id: 'TRX-9821', date: '2024-05-20', concept: 'Consulta General - Dr. Pérez', type: 'income', amount: 150.00, status: 'completed' },
+    { id: 'TRX-9822', date: '2024-05-20', concept: 'Alquiler Consultorio 3', type: 'income', amount: 300.00, status: 'completed' },
+    { id: 'TRX-9823', date: '2024-05-19', concept: 'Terapia de Pareja', type: 'income', amount: 200.00, status: 'pending' },
+    { id: 'TRX-9824', date: '2024-05-18', concept: 'Consulta Valoración', type: 'income', amount: 80.00, status: 'completed' },
+    { id: 'TRX-9825', date: '2024-05-17', concept: 'Mantenimiento Aire Acond.', type: 'expense', amount: 450.00, status: 'completed' },
 ];
 
 export const AdminAccountingReports = () => {
+    const [view, setView] = useState("monthly");
+
+    const formatCurrency = (value: number) =>
+        new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(value);
+
     return (
         <div className="space-y-6">
+            {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="bg-green-50 border-green-100">
+                {/* Card 1: Total */}
+                <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all">
                     <CardContent className="p-6">
                         <div className="flex items-center justify-between space-y-0 pb-2">
-                            <p className="text-sm font-medium text-green-700">Ingresos Totales (Mes)</p>
-                            <DollarSign className="h-4 w-4 text-green-700" />
+                            <p className="text-sm font-medium text-slate-500">Ingresos Totales (Mes)</p>
+                            <div className="bg-green-100 p-2 rounded-full">
+                                <DollarSign className="h-4 w-4 text-green-700" />
+                            </div>
                         </div>
-                        <div className="text-2xl font-bold text-green-900">$12,345.00</div>
-                        <p className="text-xs text-green-600 mt-1">+15% vs mes anterior</p>
+                        <div className="text-2xl font-bold text-slate-900">$12,345.00</div>
+                        <div className="flex items-center gap-1 mt-1">
+                            <ArrowUpRight className="h-3 w-3 text-green-600" />
+                            <p className="text-xs text-green-600 font-medium">+15% vs mes anterior</p>
+                        </div>
                     </CardContent>
                 </Card>
-                <Card>
+
+                {/* Card 2: Appointments Income */}
+                <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all">
                     <CardContent className="p-6">
                         <div className="flex items-center justify-between space-y-0 pb-2">
-                            <p className="text-sm font-medium text-muted-foreground">Citas Pagadas</p>
-                            <CreditCard className="h-4 w-4 text-muted-foreground" />
+                            <p className="text-sm font-medium text-slate-500">Ingresos por Citas</p>
+                            <div className="bg-blue-100 p-2 rounded-full">
+                                <CreditCard className="h-4 w-4 text-blue-700" />
+                            </div>
                         </div>
-                        <div className="text-2xl font-bold">145</div>
+                        <div className="text-2xl font-bold text-slate-900">$8,120.00</div>
+                        <p className="text-xs text-slate-500 mt-1">65% del total recolectado</p>
                     </CardContent>
                 </Card>
-                <Card>
+
+                {/* Card 3: Rentals Income */}
+                <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all">
                     <CardContent className="p-6">
                         <div className="flex items-center justify-between space-y-0 pb-2">
-                            <p className="text-sm font-medium text-muted-foreground">Alquileres Activos</p>
-                            <Wallet className="h-4 w-4 text-muted-foreground" />
+                            <p className="text-sm font-medium text-slate-500">Ingresos por Alquileres</p>
+                            <div className="bg-purple-100 p-2 rounded-full">
+                                <Wallet className="h-4 w-4 text-purple-700" />
+                            </div>
                         </div>
-                        <div className="text-2xl font-bold">24</div>
+                        <div className="text-2xl font-bold text-slate-900">$4,225.00</div>
+                        <p className="text-xs text-slate-500 mt-1">35% del total recolectado</p>
                     </CardContent>
                 </Card>
             </div>
 
-            <Card>
+            {/* Analytics Section */}
+            <Card className="shadow-sm border-slate-200">
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <TrendingUp className="h-5 w-5" />
-                        Resumen Financiero Semestral
-                    </CardTitle>
-                    <CardDescription>Comportamiento de ingresos brutos por mes.</CardDescription>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <CardTitle className="flex items-center gap-2 text-xl">
+                                <TrendingUp className="h-5 w-5 text-primary" />
+                                Análisis Financiero
+                            </CardTitle>
+                            <CardDescription>Visualización de tendencias de ingresos y flujo de caja.</CardDescription>
+                        </div>
+                        <Tabs defaultValue="monthly" className="w-[300px]" onValueChange={setView}>
+                            <TabsList className="grid w-full grid-cols-2">
+                                <TabsTrigger value="monthly">Mensual</TabsTrigger>
+                                <TabsTrigger value="daily">Diaria</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    </div>
                 </CardHeader>
                 <CardContent>
-                    <div className="h-[300px] w-full">
+                    <div className="h-[350px] w-full mt-4">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={mockData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="name" />
-                                <YAxis />
-                                <Tooltip
-                                    formatter={(value) => [`$${value}`, 'Ingresos']}
-                                />
-                                <Bar dataKey="income" fill="#0ea5e9" radius={[4, 4, 0, 0]} />
-                            </BarChart>
+                            {view === 'monthly' ? (
+                                <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} tickFormatter={(value) => `$${value}`} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                        cursor={{ fill: '#f1f5f9' }}
+                                    />
+                                    <Bar dataKey="income" name="Ingresos" fill="#0ea5e9" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                                </BarChart>
+                            ) : (
+                                <AreaChart data={dailyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                    <defs>
+                                        <linearGradient id="colorAmount" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.8} />
+                                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} dy={10} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b' }} tickFormatter={(value) => `$${value}`} />
+                                    <Tooltip
+                                        contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    />
+                                    <Area type="monotone" dataKey="amount" name="Ingreso Diario" stroke="#0ea5e9" fillOpacity={1} fill="url(#colorAmount)" />
+                                </AreaChart>
+                            )}
                         </ResponsiveContainer>
                     </div>
+                </CardContent>
+            </Card>
+
+            {/* Detailed Transaction Table */}
+            <Card className="shadow-sm border-slate-200">
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                        <FileText className="h-5 w-5 text-gray-500" />
+                        Detalle de Transacciones Recientes
+                    </CardTitle>
+                </CardHeader>
+                <CardContent>
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-slate-50 hover:bg-slate-50">
+                                <TableHead>ID Transacción</TableHead>
+                                <TableHead>Fecha</TableHead>
+                                <TableHead>Concepto</TableHead>
+                                <TableHead>Estado</TableHead>
+                                <TableHead className="text-right">Monto</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {transactions.map((trx) => (
+                                <TableRow key={trx.id} className="group hover:bg-slate-50/50">
+                                    <TableCell className="font-mono text-xs text-slate-500">
+                                        <div className="flex items-center gap-2">
+                                            <CalendarDays className="h-3 w-3" />
+                                            {trx.id}
+                                        </div>
+                                    </TableCell>
+                                    <TableCell>{trx.date}</TableCell>
+                                    <TableCell className="font-medium text-slate-700">{trx.concept}</TableCell>
+                                    <TableCell>
+                                        <Badge
+                                            variant="secondary"
+                                            className={`${trx.status === 'completed'
+                                                ? 'bg-green-100 text-green-700 hover:bg-green-100'
+                                                : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-100'
+                                                }`}
+                                        >
+                                            {trx.status === 'completed' ? 'Completado' : 'Pendiente'}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className={`text-right font-bold ${trx.type === 'income' ? 'text-slate-900' : 'text-red-600'}`}>
+                                        {trx.type === 'expense' ? '-' : '+'}{formatCurrency(trx.amount)}
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
                 </CardContent>
             </Card>
         </div>
