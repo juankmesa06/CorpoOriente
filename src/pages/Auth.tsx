@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Loader2, Stethoscope, UserCircle, UserPlus, Mail, CheckCircle } from 'lucide-react';
+import { Loader2, Stethoscope, UserCircle, Mail, CheckCircle, Lock, User, ArrowRight } from 'lucide-react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { PublicNavbar } from '@/components/PublicNavbar';
 import { Footer } from '@/components/Footer';
@@ -19,12 +19,6 @@ const loginSchema = z.object({
   email: z.string().trim().email({ message: 'Email inválido' }),
   password: z.string().min(6, { message: 'Mínimo 6 caracteres' }),
 });
-// ... (omitting unchanged parts for brevity if possible, but replace_file_content needs context)
-// Actually I will just update the import line and the dialog content part.
-// Splitting into two chunks is safer for replace_file_content if lines are far apart?
-// Auth.tsx is small enough.
-// Let's do imports first.
-
 
 const signupSchema = z.object({
   fullName: z.string().trim().min(2, { message: 'Nombre requerido' }).max(100),
@@ -67,7 +61,6 @@ export default function Auth() {
     e.preventDefault();
     setErrors({});
 
-    // Validar
     const result = loginSchema.safeParse({ email: loginEmail, password: loginPassword });
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
@@ -99,7 +92,6 @@ export default function Auth() {
     e.preventDefault();
     setErrors({});
 
-    // Validar
     const result = signupSchema.safeParse({
       fullName: signupName,
       email: signupEmail,
@@ -134,175 +126,245 @@ export default function Auth() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-slate-100">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-teal-50 via-white to-slate-50">
       <PublicNavbar />
 
-      <main className="flex-grow flex items-center justify-center bg-gradient-to-br from-background to-muted p-4 pt-24">
-        <Card className="w-full max-w-md shadow-xl my-8">
-          <CardHeader className="text-center space-y-2">
-            <Link to="/" className="mx-auto block hover:opacity-80 transition-opacity cursor-pointer">
-              <div className="bg-primary/10 p-3 rounded-full w-fit mx-auto">
-                <Stethoscope className="h-8 w-8 text-primary" />
+      <main className="flex-grow flex items-center justify-center p-4 pt-28 pb-12">
+        <Card className="w-full max-w-lg shadow-2xl border-0 overflow-hidden">
+          {/* Header with gradient */}
+          <div className="bg-gradient-to-r from-teal-600 to-teal-700 p-8 text-center text-white">
+            <Link to="/" className="inline-block hover:opacity-90 transition-opacity">
+              <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl w-fit mx-auto mb-4">
+                <Stethoscope className="h-10 w-10 text-white" />
               </div>
-              <CardTitle className="text-xl font-bold italic text-primary mt-2">Centro PsicoTerapeutico de Oriente</CardTitle>
+              <h1 className="text-2xl font-bold mb-1">Centro PsicoTerapéutico</h1>
+              <p className="text-teal-100 text-sm font-medium">de Oriente</p>
             </Link>
-            <CardDescription>Sistema de gestión psicoterapéutica</CardDescription>
-          </CardHeader>
-          <CardContent>
+          </div>
+
+          <CardContent className="p-8">
             <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
-                <TabsTrigger value="signup">Registrarse</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-100 p-1 h-12">
+                <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">
+                  Iniciar Sesión
+                </TabsTrigger>
+                <TabsTrigger value="signup" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">
+                  Registrarse
+                </TabsTrigger>
               </TabsList>
 
               {/* Login Tab */}
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4 mt-4">
+              <TabsContent value="login" className="space-y-5">
+                <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="correo@ejemplo.com"
-                      value={loginEmail}
-                      onChange={e => setLoginEmail(e.target.value)}
-                      disabled={isSubmitting}
-                    />
+                    <Label htmlFor="login-email" className="text-sm font-semibold text-slate-700">
+                      Correo Electrónico
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="tu@email.com"
+                        value={loginEmail}
+                        onChange={e => setLoginEmail(e.target.value)}
+                        disabled={isSubmitting}
+                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                      />
+                    </div>
                     {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
+                      <p className="text-sm text-red-600 flex items-center gap-1">
+                        <span className="text-xs">⚠</span> {errors.email}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="login-password">Contraseña</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={loginPassword}
-                      onChange={e => setLoginPassword(e.target.value)}
-                      disabled={isSubmitting}
-                    />
+                    <Label htmlFor="login-password" className="text-sm font-semibold text-slate-700">
+                      Contraseña
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={loginPassword}
+                        onChange={e => setLoginPassword(e.target.value)}
+                        disabled={isSubmitting}
+                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                      />
+                    </div>
                     {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password}</p>
+                      <p className="text-sm text-red-600 flex items-center gap-1">
+                        <span className="text-xs">⚠</span> {errors.password}
+                      </p>
                     )}
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-lg shadow-teal-600/30 text-white"
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                         Ingresando...
                       </>
                     ) : (
-                      'Iniciar Sesión'
+                      <>
+                        Iniciar Sesión
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                      </>
                     )}
                   </Button>
                 </form>
               </TabsContent>
 
               {/* Signup Tab */}
-              <TabsContent value="signup">
-                <form onSubmit={handleSignup} className="space-y-4 mt-4">
+              <TabsContent value="signup" className="space-y-5">
+                <form onSubmit={handleSignup} className="space-y-5">
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name">Nombre completo</Label>
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      placeholder="Dr. Juan Pérez"
-                      value={signupName}
-                      onChange={e => setSignupName(e.target.value)}
-                      disabled={isSubmitting}
-                    />
+                    <Label htmlFor="signup-name" className="text-sm font-semibold text-slate-700">
+                      Nombre Completo
+                    </Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="signup-name"
+                        type="text"
+                        placeholder="Juan Pérez"
+                        value={signupName}
+                        onChange={e => setSignupName(e.target.value)}
+                        disabled={isSubmitting}
+                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                      />
+                    </div>
                     {errors.fullName && (
-                      <p className="text-sm text-destructive">{errors.fullName}</p>
+                      <p className="text-sm text-red-600 flex items-center gap-1">
+                        <span className="text-xs">⚠</span> {errors.fullName}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="correo@ejemplo.com"
-                      value={signupEmail}
-                      onChange={e => setSignupEmail(e.target.value)}
-                      disabled={isSubmitting}
-                    />
+                    <Label htmlFor="signup-email" className="text-sm font-semibold text-slate-700">
+                      Correo Electrónico
+                    </Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="signup-email"
+                        type="email"
+                        placeholder="tu@email.com"
+                        value={signupEmail}
+                        onChange={e => setSignupEmail(e.target.value)}
+                        disabled={isSubmitting}
+                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                      />
+                    </div>
                     {errors.email && (
-                      <p className="text-sm text-destructive">{errors.email}</p>
+                      <p className="text-sm text-red-600 flex items-center gap-1">
+                        <span className="text-xs">⚠</span> {errors.email}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password">Contraseña</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupPassword}
-                      onChange={e => setSignupPassword(e.target.value)}
-                      disabled={isSubmitting}
-                    />
+                    <Label htmlFor="signup-password" className="text-sm font-semibold text-slate-700">
+                      Contraseña
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="signup-password"
+                        type="password"
+                        placeholder="••••••••"
+                        value={signupPassword}
+                        onChange={e => setSignupPassword(e.target.value)}
+                        disabled={isSubmitting}
+                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                      />
+                    </div>
                     {errors.password && (
-                      <p className="text-sm text-destructive">{errors.password}</p>
+                      <p className="text-sm text-red-600 flex items-center gap-1">
+                        <span className="text-xs">⚠</span> {errors.password}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-confirm">Confirmar contraseña</Label>
-                    <Input
-                      id="signup-confirm"
-                      type="password"
-                      placeholder="••••••••"
-                      value={signupConfirm}
-                      onChange={e => setSignupConfirm(e.target.value)}
-                      disabled={isSubmitting}
-                    />
+                    <Label htmlFor="signup-confirm" className="text-sm font-semibold text-slate-700">
+                      Confirmar Contraseña
+                    </Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                      <Input
+                        id="signup-confirm"
+                        type="password"
+                        placeholder="••••••••"
+                        value={signupConfirm}
+                        onChange={e => setSignupConfirm(e.target.value)}
+                        disabled={isSubmitting}
+                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                      />
+                    </div>
                     {errors.confirmPassword && (
-                      <p className="text-sm text-destructive">{errors.confirmPassword}</p>
+                      <p className="text-sm text-red-600 flex items-center gap-1">
+                        <span className="text-xs">⚠</span> {errors.confirmPassword}
+                      </p>
                     )}
                   </div>
 
                   <div className="space-y-3 pt-2">
-                    <Label className="text-sm font-medium">Registrarme como:</Label>
+                    <Label className="text-sm font-semibold text-slate-700">Registrarme como:</Label>
                     <RadioGroup
                       defaultValue="patient"
                       value={signupRole}
                       onValueChange={(val: 'doctor' | 'patient') => setSignupRole(val)}
-                      className="flex flex-row gap-6 p-1"
+                      className="grid grid-cols-2 gap-3"
                       disabled={isSubmitting}
                     >
-                      <div className="flex items-center space-x-2 cursor-pointer">
-                        <RadioGroupItem value="patient" id="patient" className="text-primary" />
-                        <Label htmlFor="patient" className="font-normal cursor-pointer flex items-center gap-1.5">
-                          <UserCircle className="h-4 w-4" /> Paciente
+                      <div className={`flex items-center space-x-3 border-2 rounded-xl p-4 cursor-pointer transition-all ${signupRole === 'patient' ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                        <RadioGroupItem value="patient" id="patient" className="text-teal-600" />
+                        <Label htmlFor="patient" className="font-medium cursor-pointer flex items-center gap-2 flex-1">
+                          <UserCircle className="h-5 w-5 text-teal-600" />
+                          <span>Paciente</span>
                         </Label>
                       </div>
-                      <div className="flex items-center space-x-2 cursor-pointer">
-                        <RadioGroupItem value="doctor" id="doctor" className="text-primary" />
-                        <Label htmlFor="doctor" className="font-normal cursor-pointer flex items-center gap-1.5">
-                          <Stethoscope className="h-4 w-4" /> Médico
+                      <div className={`flex items-center space-x-3 border-2 rounded-xl p-4 cursor-pointer transition-all ${signupRole === 'doctor' ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                        <RadioGroupItem value="doctor" id="doctor" className="text-teal-600" />
+                        <Label htmlFor="doctor" className="font-medium cursor-pointer flex items-center gap-2 flex-1">
+                          <Stethoscope className="h-5 w-5 text-teal-600" />
+                          <span>Médico</span>
                         </Label>
                       </div>
                     </RadioGroup>
                   </div>
 
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                  <Button
+                    type="submit"
+                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-lg shadow-teal-600/30 text-white"
+                    disabled={isSubmitting}
+                  >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                         Creando cuenta...
                       </>
                     ) : (
-                      'Crear Cuenta'
+                      <>
+                        Crear Cuenta
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                      </>
                     )}
                   </Button>
                 </form>
@@ -310,49 +372,48 @@ export default function Auth() {
             </Tabs>
           </CardContent>
         </Card>
-      </main >
+      </main>
 
       {/* Registration Success Dialog */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="sm:max-w-md text-center">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader className="items-center space-y-4 pt-4">
-            <div className="bg-green-100 p-3 rounded-full">
-              <CheckCircle className="h-10 w-10 text-green-600" />
+            <div className="bg-gradient-to-br from-green-100 to-emerald-100 p-4 rounded-full">
+              <CheckCircle className="h-12 w-12 text-green-600" />
             </div>
-            <DialogTitle className="text-2xl font-bold text-green-700">¡Registro Exitoso!</DialogTitle>
-            <DialogDescription className="text-lg text-slate-600">
-              Gracias por unirte al <b>Centro PsicoTerapéutico de Oriente</b>.
+            <DialogTitle className="text-2xl font-bold text-green-700 text-center">
+              ¡Registro Exitoso!
+            </DialogTitle>
+            <DialogDescription className="text-center text-base text-slate-600">
+              Gracias por unirte al <span className="font-semibold text-teal-700">Centro PsicoTerapéutico de Oriente</span>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4 text-slate-600">
-            {/* Removed the paragraph that is now in description to avoid duplicity/nesting issues if any, or keep it. */
-              /* The previous code had <p className="text-lg">... p>. I moved it to DialogDescription. */
-            }
-            <div className="bg-blue-50 p-4 rounded-lg flex items-start gap-3 text-left">
-              <Mail className="h-5 w-5 text-blue-500 mt-1 shrink-0" />
+          <div className="space-y-4 py-4">
+            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3">
+              <Mail className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-sm font-medium text-blue-900">Verifica tu correo electrónico</p>
+                <p className="text-sm font-semibold text-blue-900">Verifica tu correo electrónico</p>
                 <p className="text-sm text-blue-700">
-                  Hemos enviado un enlace de confirmación a <b>{signupEmail}</b> for security.
+                  Hemos enviado un enlace de confirmación a <span className="font-semibold">{signupEmail}</span>
                 </p>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-slate-600 text-center">
               Por favor revisa tu bandeja de entrada (y la carpeta de Spam) para activar tu cuenta.
             </p>
           </div>
 
-          <div className="flex justify-center pt-2">
-            <Button onClick={() => setShowSuccessDialog(false)} className="w-full bg-green-600 hover:bg-green-700">
-              Entendido, ya reviso mi correo
-            </Button>
-          </div>
+          <Button
+            onClick={() => setShowSuccessDialog(false)}
+            className="w-full h-12 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold"
+          >
+            Entendido, ya reviso mi correo
+          </Button>
         </DialogContent>
       </Dialog>
 
-
       <Footer />
-    </div >
+    </div>
   );
 }

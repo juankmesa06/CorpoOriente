@@ -205,7 +205,7 @@ const PatientDashboard = () => {
     return (
         <div className="space-y-8 min-h-screen bg-gray-50/50 p-4 md:p-8 animate-in fade-in duration-700">
             {/* Header / Personalized Welcome */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary via-primary/90 to-blue-600 shadow-xl">
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-teal-600 via-teal-700 to-slate-900 shadow-xl">
                 {/* Decorative background shapes */}
                 <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl -mr-32 -mt-32" />
                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/5 rounded-full blur-2xl -ml-20 -mb-20" />
@@ -215,14 +215,14 @@ const PatientDashboard = () => {
                         <h1 className="text-4xl font-extrabold tracking-tight mb-2">
                             Hola, {patientName || user?.email?.split('@')[0]}
                         </h1>
-                        <p className="text-blue-100 text-lg font-medium leading-relaxed opacity-90">
+                        <p className="text-teal-100 text-lg font-medium leading-relaxed opacity-90">
                             "Tómate un momento para respirar hoy. Tu bienestar es lo primero."
                         </p>
                     </div>
 
                     <div className="flex items-center gap-3">
                         <Link to="/appointments">
-                            <Button className="h-14 px-8 rounded-full bg-white text-primary hover:bg-blue-50 font-bold text-base shadow-lg hover:shadow-xl transition-all hover:scale-105 border-0">
+                            <Button className="h-14 px-8 rounded-full bg-white text-teal-700 hover:bg-teal-50 font-bold text-base shadow-lg hover:shadow-xl transition-all hover:scale-105 border-0">
                                 <PlusCircle className="h-5 w-5 mr-2" />
                                 Agendar Cita
                             </Button>
@@ -236,7 +236,7 @@ const PatientDashboard = () => {
                 <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-primary to-blue-400 group-hover:w-2 transition-all duration-300" />
                 <CardHeader className="bg-gradient-to-r from-gray-50 to-white border-b border-gray-100/50">
                     <CardTitle className="flex items-center gap-3 text-xl text-slate-800">
-                        <div className="p-2 bg-primary/10 rounded-lg text-primary">
+                        <div className="p-2 bg-teal-100 rounded-lg text-teal-600">
                             <CalendarDays className="h-6 w-6" />
                         </div>
                         <span className="font-bold">Mis Próximas Citas</span>
@@ -252,7 +252,7 @@ const PatientDashboard = () => {
                                     <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-white border border-slate-100 shadow-sm min-w-[100px] group-hover/item:border-primary/20 group-hover/item:shadow-md transition-all">
                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{format(new Date(apt.start_time), 'MMM', { locale: es })}</p>
                                         <p className="text-3xl font-black text-slate-800 my-0.5">{format(new Date(apt.start_time), 'd')}</p>
-                                        <p className="text-xs font-medium text-primary bg-primary/5 px-2 py-0.5 rounded-full">{format(new Date(apt.start_time), 'EEE', { locale: es })}</p>
+                                        <p className="text-xs font-medium text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">{format(new Date(apt.start_time), 'EEE', { locale: es })}</p>
                                     </div>
 
                                     <div className="flex-1 space-y-2">
@@ -307,7 +307,7 @@ const PatientDashboard = () => {
                                                             className={`rounded-full gap-2 font-medium shadow-sm transition-all
                                                             ${isTooEarly
                                                                     ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
-                                                                    : 'bg-white hover:bg-blue-50 border-blue-200 text-blue-600'}`}
+                                                                    : 'bg-white hover:bg-teal-50 border-teal-200 text-teal-600'}`}
                                                             onClick={() => !isTooEarly && window.open(`https://meet.jit.si/CorpoOriente-${apt.id}`, '_blank')}
                                                             title={isTooEarly ? "Habilitado 1 hora antes de la cita" : "Unirse a la videollamada"}
                                                         >
@@ -356,7 +356,7 @@ const PatientDashboard = () => {
                             <p className="text-slate-900 font-medium text-lg">Estás al día</p>
                             <p className="text-slate-500 text-sm mb-6">No tienes citas programadas próximamente</p>
                             <Link to="/appointments">
-                                <Button variant="outline" className="gap-2 border-primary/20 text-primary hover:bg-primary/5">
+                                <Button variant="outline" className="gap-2 border-teal-200 text-teal-600 hover:bg-teal-50">
                                     <PlusCircle className="h-4 w-4" />
                                     Programar Nueva Cita
                                 </Button>
@@ -496,7 +496,7 @@ const PatientDashboard = () => {
                 {/* Wellness Hub */}
                 <div className="space-y-8">
                     {/* Espacios de Relajacion */}
-                    <Card className="border-none shadow-md bg-[#1a2b3b] text-white overflow-hidden relative group">
+                    <Card className="border-none shadow-md bg-gradient-to-br from-slate-800 to-slate-900 text-white overflow-hidden relative group">
                         <div className="absolute inset-0 bg-gradient-to-br from-transparent to-black/20" />
                         <CardHeader className="relative z-10">
                             <div className="flex items-center justify-between">

@@ -140,7 +140,7 @@ const Index = () => {
 
       <main className="flex-grow pt-16">
         {/* Hero Section - Modern Gradient */}
-        <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-gradient-to-br from-teal-500 via-teal-600 to-slate-900">
+        <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-gradient-to-br from-teal-600 via-teal-700 to-slate-900">
           {/* Animated Background Shapes */}
           <div className="absolute inset-0 overflow-hidden">
             <div className="absolute top-20 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl animate-pulse"></div>
@@ -151,45 +151,45 @@ const Index = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               {/* Left Content */}
               <div className="text-white">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm font-semibold mb-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/25 backdrop-blur-sm border border-white/40 text-white text-sm font-bold mb-6 shadow-lg">
                   <Heart className="h-4 w-4" />
                   Tu bienestar mental es nuestra prioridad
                 </div>
 
-                <h1 className="text-5xl lg:text-7xl font-bold tracking-tight mb-6 leading-[1.1]">
-                  Encuentra la paz y el equilibrio que <span className="text-teal-200 italic">mereces</span>
+                <h1 className="text-5xl lg:text-7xl font-bold tracking-tight mb-6 leading-[1.1] text-white drop-shadow-lg">
+                  Encuentra la paz y el equilibrio que <span className="text-teal-100 italic">mereces</span>
                 </h1>
 
-                <p className="text-xl text-teal-50 mb-10 leading-relaxed max-w-xl">
+                <p className="text-xl text-white/95 mb-10 leading-relaxed max-w-xl drop-shadow-md">
                   En el Centro PsicoTerapéutico de Oriente, ofrecemos un espacio seguro y profesional para acompañarte en tu proceso de sanación y crecimiento personal.
                 </p>
 
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Link to="/auth?mode=register">
-                    <Button size="lg" className="rounded-full px-8 h-14 text-lg bg-white text-teal-600 hover:bg-teal-50 shadow-2xl shadow-black/20 transition-all hover:scale-105">
+                    <Button size="lg" className="rounded-full px-8 h-14 text-lg bg-white text-teal-700 hover:bg-teal-50 shadow-2xl shadow-black/30 transition-all hover:scale-105 font-bold">
                       Comienza Tu Proceso Ahora
                       <ArrowRight className="ml-2 h-5 w-5" />
                     </Button>
                   </Link>
                   <a href="#services">
-                    <Button size="lg" variant="outline" className="rounded-full px-8 h-14 text-lg border-2 border-white text-white hover:bg-white/10 backdrop-blur-sm">
+                    <Button size="lg" variant="outline" className="rounded-full px-8 h-14 text-lg border-2 border-white bg-white/10 text-white hover:bg-white hover:text-teal-700 backdrop-blur-sm font-semibold shadow-lg transition-all">
                       Ver Especialidades
                     </Button>
                   </a>
                 </div>
 
                 {/* Trust Badges */}
-                <div className="flex flex-wrap gap-6 mt-12 text-white/90">
+                <div className="flex flex-wrap gap-6 mt-12 text-white font-medium">
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-teal-200" />
+                    <CheckCircle2 className="h-5 w-5 text-white" />
                     <span className="text-sm font-medium">10+ Años</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-teal-200" />
+                    <CheckCircle2 className="h-5 w-5 text-white" />
                     <span className="text-sm font-medium">500+ Pacientes</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-teal-200" />
+                    <CheckCircle2 className="h-5 w-5 text-white" />
                     <span className="text-sm font-medium">Certificados</span>
                   </div>
                 </div>
@@ -217,15 +217,15 @@ const Index = () => {
         </section>
 
         {/* Stats Section */}
-        <section className="py-20 bg-teal-600 text-white relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-teal-600 to-teal-700"></div>
+        <section className="py-20 bg-teal-700 text-white relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-teal-700 to-teal-800"></div>
           <div className="container relative z-10 mx-auto px-4">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
               {stats.map((stat, i) => (
                 <div key={i} className="text-center">
-                  <stat.icon className="h-12 w-12 mx-auto mb-4 text-teal-200" />
+                  <stat.icon className="h-12 w-12 mx-auto mb-4 text-teal-100" />
                   <p className="text-5xl font-bold mb-2">{stat.number}</p>
-                  <p className="text-teal-100 font-medium">{stat.label}</p>
+                  <p className="text-teal-50 font-semibold">{stat.label}</p>
                 </div>
               ))}
             </div>
@@ -500,6 +500,36 @@ const Index = () => {
           </div>
         </section>
       </main>
+
+      {/* Floating WhatsApp Button */}
+      <a
+        href="https://wa.me/582812345678?text=Hola%2C%20necesito%20ayuda%20con%20una%20consulta"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 group"
+      >
+        <div className="relative">
+          {/* Pulse Animation */}
+          <div className="absolute inset-0 bg-green-500 rounded-full animate-ping opacity-75"></div>
+
+          {/* Main Button */}
+          <div className="relative bg-gradient-to-br from-green-500 to-green-600 text-white rounded-full shadow-2xl hover:shadow-green-500/50 transition-all duration-300 hover:scale-110 flex items-center gap-3 pr-6 pl-5 py-4">
+            <MessageCircle className="h-7 w-7 animate-bounce" />
+            <div className="hidden md:block">
+              <p className="text-sm font-bold leading-tight">¿Necesitas ayuda?</p>
+              <p className="text-xs opacity-90">Chatea con nosotros</p>
+            </div>
+          </div>
+
+          {/* Tooltip for mobile */}
+          <div className="md:hidden absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="bg-slate-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-xl">
+              ¿Necesitas ayuda? Chatea aquí
+              <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-slate-900"></div>
+            </div>
+          </div>
+        </div>
+      </a>
 
       <Footer />
 

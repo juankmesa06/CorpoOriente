@@ -15,6 +15,11 @@ export const Navbar = () => {
     useEffect(() => {
         const fetchUserName = async () => {
             if (user) {
+                // Don't fetch name for admins
+                if (roles.includes('admin') || roles.includes('super_admin')) {
+                    return;
+                }
+
                 const { data } = await supabase
                     .from('profiles')
                     .select('full_name')
@@ -27,52 +32,49 @@ export const Navbar = () => {
             }
         };
         fetchUserName();
-    }, [user]);
+    }, [user, roles]);
 
-    const getRoleBadgeVariant = (role: string) => {
-        switch (role) {
-            case 'admin': return 'destructive';
-            case 'doctor': return 'default';
-            case 'receptionist': return 'secondary';
-            case 'patient': return 'outline';
-            default: return 'outline';
-        }
-    };
-
-    const getRoleLabel = (role: string) => {
-        const labels: Record<string, string> = {
-            admin: 'Administrador',
-            doctor: 'Médico',
-            receptionist: 'Recepcionista',
-            patient: 'Paciente',
+    const getRoleBadgeConfig = (role: string) => {
+        const configs: Record<string, { className: string; label: string }> = {
+            admin: { className: 'bg-red-100 text-red-700 border-red-200', label: 'Administrador' },
+            super_admin: { className: 'bg-purple-100 text-purple-700 border-purple-200', label: 'Super Admin' },
+            doctor: { className: 'bg-teal-100 text-teal-700 border-teal-200', label: 'Médico' },
+            receptionist: { className: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Recepcionista' },
+            patient: { className: 'bg-slate-100 text-slate-700 border-slate-200', label: 'Paciente' },
         };
-        return labels[role] || role;
+        return configs[role] || configs.patient;
     };
 
     return (
-        <header className="border-b bg-card py-4 sticky top-0 z-50 backdrop-blur-md bg-card/80">
+        <header className="border-b border-slate-200 bg-white py-4 sticky top-0 z-50 shadow-sm">
             <div className="container mx-auto px-4 flex items-center justify-between">
                 <Link to="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer">
-                    <div className="bg-primary/10 p-2 rounded-lg">
-                        <Stethoscope className="h-6 w-6 text-primary" />
+                    <div className="bg-gradient-to-br from-teal-500 to-teal-600 p-2.5 rounded-xl shadow-md">
+                        <Stethoscope className="h-6 w-6 text-white" />
                     </div>
-                    <h1 className="text-xl font-bold italic text-primary hidden md:block">Centro PsicoTerapeutico</h1>
-                    <h1 className="text-xl font-bold italic text-primary md:hidden text-slate-700">CPTO</h1>
+                    <div className="hidden md:block">
+                        <h1 className="text-xl font-bold leading-tight">
+                            <span className="text-teal-600">Centro</span>{" "}
+                            <span className="text-slate-900">PsicoTerapéutico</span>
+                        </h1>
+                        <p className="text-xs text-slate-500">de Oriente</p>
+                    </div>
+                    <h1 className="text-xl font-bold text-teal-600 md:hidden">CPTO</h1>
                 </Link>
 
                 <nav className="hidden lg:flex items-center gap-6 mx-8">
-                    <Link to="/dashboard" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
+                    <Link to="/dashboard" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-teal-600 transition-colors">
                         <LayoutDashboard className="h-4 w-4" />
                         Dashboard
                     </Link>
                     {!roles.includes('super_admin') && !roles.includes('admin') && !roles.includes('receptionist') && (
                         <>
-                            <Link to="/appointments" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
+                            <Link to="/appointments" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-teal-600 transition-colors">
                                 <Calendar className="h-4 w-4" />
                                 {hasRole('patient') ? 'Mis Citas' : 'Agenda'}
                             </Link>
 
-                            <Link to="/settings" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-primary transition-colors">
+                            <Link to="/settings" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-teal-600 transition-colors">
                                 <Settings className="h-4 w-4" />
                                 Configuración
                             </Link>
@@ -82,19 +84,41 @@ export const Navbar = () => {
 
                 <div className="flex items-center gap-4">
                     <div className="hidden md:flex items-center gap-2">
-                        <UserCircle className="h-5 w-5 text-muted-foreground" />
-                        <span className="text-sm font-medium">{roles.includes('super_admin') ? 'Super Admin' : (roles.includes('admin') ? 'Administrador' : (userName || user?.email?.split('@')[0]))}</span>
+                        <UserCircle className="h-5 w-5 text-slate-500" />
+                        <span className="text-sm font-medium text-slate-700">
+                            {roles.includes('super_admin') ? 'Super Administrador' :
+                                roles.includes('admin') ? 'Administrador' :
+                                    (userName || user?.email?.split('@')[0])}
+                        </span>
                     </div>
-                    <div className="flex gap-1">
-                        {roles
-                            .filter(role => !(role === 'doctor' && (roles.includes('admin') || roles.includes('super_admin'))))
-                            .map(role => (
-                                <Badge key={role} variant={getRoleBadgeVariant(role)} className="text-[10px] px-2 py-0">
-                                    {getRoleLabel(role)}
+                    {/* Show only primary role */}
+                    {(() => {
+                        // Priority order: super_admin > admin > receptionist > doctor > patient
+                        let primaryRole = '';
+                        if (roles.includes('super_admin')) primaryRole = 'super_admin';
+                        else if (roles.includes('admin')) primaryRole = 'admin';
+                        else if (roles.includes('receptionist')) primaryRole = 'receptionist';
+                        else if (roles.includes('doctor')) primaryRole = 'doctor';
+                        else if (roles.includes('patient')) primaryRole = 'patient';
+
+                        if (primaryRole) {
+                            const config = getRoleBadgeConfig(primaryRole);
+                            return (
+                                <Badge
+                                    className={`${config.className} text-[10px] px-2.5 py-0.5 border font-semibold`}
+                                >
+                                    {config.label}
                                 </Badge>
-                            ))}
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={signOut} className="hover:text-destructive h-9 w-9 p-0 md:w-auto md:px-3">
+                            );
+                        }
+                        return null;
+                    })()}
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={signOut}
+                        className="hover:text-red-600 hover:bg-red-50 h-9 w-9 p-0 md:w-auto md:px-3 transition-colors"
+                    >
                         <LogOut className="h-4 w-4 md:mr-2" />
                         <span className="hidden md:inline">Salir</span>
                     </Button>

@@ -17,24 +17,29 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 187 53% 61%;
-    --primary-foreground: 221 24% 37%;
+    /* Teal-600: #0d9488 → HSL(173, 80%, 40%) */
+    --primary: 173 80% 40%;
+    /* Slate-800: #1e293b → HSL(217, 33%, 17%) */
+    --primary-foreground: 217 33% 17%;
 
-    --secondary: 221 24% 37%;
+    /* Slate-800: #1e293b */
+    --secondary: 217 33% 17%;
     --secondary-foreground: 0 0% 100%;
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 187 53% 61%;
-    --accent-foreground: 221 24% 37%;
+    /* Teal-600 for accent */
+    --accent: 173 80% 40%;
+    --accent-foreground: 217 33% 17%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 187 53% 61%;
+    /* Teal-600 for ring */
+    --ring: 173 80% 40%;
 
     --radius: 0.5rem;
 
