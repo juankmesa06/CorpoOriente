@@ -110,9 +110,9 @@ export function AdminAppointmentManager() {
                     .insert({
                         appointment_id: appointment.id,
                         amount: parseFloat(amount),
-                        payment_date: new Date().toISOString(),
+                        paid_at: new Date().toISOString(),
                         payment_method: paymentMethod,
-                        status: 'completed'
+                        status: 'paid'
                     });
 
                 if (payError) {

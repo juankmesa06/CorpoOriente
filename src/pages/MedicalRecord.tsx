@@ -8,7 +8,8 @@ import { MedicalHistoryTimeline } from '@/components/medical-records/MedicalHist
 import { VitalSignsCard } from '@/components/medical-records/VitalSignsCard';
 import { useMedicalRecords, PatientMedicalHistory } from '@/hooks/useMedicalRecords';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { FileText, Loader2, Thermometer, Activity, Pill, AlertCircle, ArrowLeft, HeartPulse, User } from 'lucide-react';
+import { FileText, Loader2, Thermometer, Activity, Pill, AlertCircle, ArrowLeft, HeartPulse, User, Video, Minimize2, ExternalLink, Copy } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 
@@ -37,7 +38,8 @@ const MedicalRecord = () => {
 
     const { getPatientHistory, createEntry } = useMedicalRecords();
     const [loading, setLoading] = useState(true);
-    const [history, setHistory] = useState<PatientMedicalHistory | null>(null);
+    const [medicalHistory, setMedicalHistory] = useState<PatientMedicalHistory | null>(null);
+    const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [vitalData, setVitalData] = useState<any>({
         blood_type: null,
@@ -45,24 +47,92 @@ const MedicalRecord = () => {
         current_medications: []
     });
 
+    // Video Call State
+    const [videoUrl, setVideoUrl] = useState<string | null>(null);
+    const [isVideoOpen, setIsVideoOpen] = useState(false);
+    const [isVideoMinimized, setIsVideoMinimized] = useState(false);
+
     // Dialog state
     const [isFinishDialogOpen, setIsFinishDialogOpen] = useState(false);
     const [pendingEntryData, setPendingEntryData] = useState<CreateEntryInput | null>(null);
 
     const handleSaveEntry = async (data: CreateEntryInput, completeAppointment = false) => {
         try {
-            // 1. Create Entry
-            await createEntry(data);
+            // 1. Separate followUpDate from the actual medical entry data
+            const { followUpDate, ...cleanEntryData } = data as any;
 
-            // 2. If completing, update appointment status and notify
+            // 2. Create the Medical Entry
+            await createEntry(cleanEntryData);
+
+            // 3. If completing the appointment...
             if (completeAppointment && appointmentId) {
-                // Update appointment status directly
+                // Mark current as completed
                 await supabase
                     .from('appointments')
                     .update({ status: 'completed' })
                     .eq('id', appointmentId);
 
-                // Notify Patient (if patientId matches a user)
+                // Earnings Logic: Fetch payment amount and rental cost
+                const { data: apptData } = await supabase
+                    .from('appointments')
+                    .select(`
+                        doctor_id,
+                        payments (
+                            amount
+                        ),
+                        room_rentals:rental_id (
+                            rental_price
+                        )
+                    `)
+                    .eq('id', appointmentId)
+                    .single();
+
+                if (apptData) {
+                    const price = Number((apptData as any).payments?.amount) || 0;
+                    const rentalData = Array.isArray(apptData.room_rentals) ? apptData.room_rentals[0] : apptData.room_rentals;
+                    const rentalCost = Number(rentalData?.rental_price) || 0;
+                    const doctorNet = Math.max(0, price - rentalCost);
+
+                    // Insert Payout Record
+                    await (supabase.from('payouts' as any) as any).insert([{
+                        appointment_id: appointmentId,
+                        doctor_id: apptData.doctor_id,
+                        amount: price,
+                        rental_fee: rentalCost,
+                        doctor_payout: doctorNet,
+                        status: 'processed'
+                    }]);
+                }
+
+                // Handle Follow-up Appointment Creation
+                if (followUpDate) {
+                    const nextStart = new Date(followUpDate);
+                    const nextEnd = new Date(nextStart.getTime() + 60 * 60 * 1000); // Default 1 hour
+
+                    // Get the internal doctor_id from profile
+                    const { data: dProfile } = await supabase
+                        .from('doctor_profiles')
+                        .select('id')
+                        .eq('user_id', user?.id)
+                        .single();
+
+                    const { error: followUpError } = await supabase
+                        .from('appointments')
+                        .insert([{
+                            doctor_id: dProfile?.id,
+                            patient_id: patientId,
+                            start_time: nextStart.toISOString(),
+                            end_time: nextEnd.toISOString(),
+                            status: 'pending_payment' as any,
+                            notes: 'Sesión de seguimiento generada automáticamente'
+                        }]);
+
+                    if (!followUpError) {
+                        toast.success("Próxima cita agendada (Pendiente de Pago)");
+                    }
+                }
+
+                // Notify Patient
                 if (patientId) {
                     const { data: pProfile } = await supabase
                         .from('patient_profiles')
@@ -72,23 +142,34 @@ const MedicalRecord = () => {
 
                     if (pProfile?.user_id) {
                         await supabase
-                            .from('notifications')
+                            .from('notifications' as any)
                             .insert([{
                                 user_id: pProfile.user_id,
-                                title: 'Consulta Finalizada',
-                                message: `El Dr. ${user?.user_metadata?.full_name || 'su médico'} ha finalizado la consulta y actualizado su historial.`,
+                                title: 'Sesión Finalizada',
+                                message: `El Dr. ${user?.user_metadata?.full_name || 'su terapeuta'} ha finalizado la sesión.`,
                                 type: 'success'
                             }]);
+
+                        if (followUpDate) {
+                            await supabase
+                                .from('notifications' as any)
+                                .insert([{
+                                    user_id: pProfile.user_id,
+                                    title: 'Nueva Cita Pendiente de Pago',
+                                    message: `Se ha generado su próxima cita para el ${new Date(followUpDate).toLocaleString()}. Tiene 24 horas para realizar el pago o se liberará el espacio.`,
+                                    type: 'warning'
+                                }]);
+                        }
                     }
                 }
             }
 
-            toast.success(completeAppointment ? "Consulta finalizada y guardada" : "Entrada guardada exitosamente");
+            toast.success(completeAppointment ? "Sesión finalizada y procesada" : "Entrada guardada exitosamente");
 
             // Refresh history
             if (patientId) {
                 const updatedHistory = await getPatientHistory(patientId);
-                setHistory(updatedHistory);
+                setMedicalHistory(updatedHistory);
             }
 
             // Exit consultation mode
@@ -129,12 +210,32 @@ const MedicalRecord = () => {
                         allergies: profile.allergies || []
                     }));
 
-                    // 2. Fetch History using RPC
+                    // 2. Fetch History using RPC and upcoming appointments
                     try {
-                        const patientHistory = await getPatientHistory(profile.id);
-                        setHistory(patientHistory);
-                    } catch (e) {
-                        console.log("No medical history found or error fetching it");
+                        // Fetch medical history (RPC)
+                        const { data: historyData, error: historyError } = await supabase.rpc('get_patient_medical_history', { _patient_id: profile.id });
+                        if (historyError) throw historyError;
+                        if (historyData) setMedicalHistory(historyData as any);
+
+                        // Fetch upcoming appointments
+                        const { data: appointmentsData, error: apptError } = await supabase
+                            .from('appointments')
+                            .select('*, doctor_profiles(profiles(full_name, avatar_url))')
+                            .eq('patient_id', profile.id)
+                            .gte('start_time', new Date().toISOString())
+                            .in('status', ['confirmed', 'pending'] as any[])
+                            .order('start_time', { ascending: true });
+
+                        if (!apptError && appointmentsData) {
+                            setUpcomingAppointments(appointmentsData);
+                        }
+
+                        if (!historyData && (!appointmentsData || appointmentsData.length === 0)) {
+                            setError("No se encontró información técnica o citas para este paciente.");
+                        }
+                    } catch (e: any) {
+                        console.error("RPC Error:", e);
+                        setError(`Error al obtener historial: ${e.message || 'Error desconocido'}`);
                     }
 
                     // 3. Fetch Medications
@@ -152,7 +253,7 @@ const MedicalRecord = () => {
                     }
 
                 } else {
-                    setError("No econtró información médica asociada.");
+                    setError("No se encontró información médica asociada.");
                 }
             } catch (err: any) {
                 console.error('Error:', err);
@@ -160,10 +261,30 @@ const MedicalRecord = () => {
             } finally {
                 setLoading(false);
             }
+
+        };
+
+        const fetchAppointmentDetails = async () => {
+            if (!appointmentId) return;
+
+            const { data } = await supabase
+                .from('appointments')
+                .select('meeting_url, is_virtual')
+                .eq('id', appointmentId)
+                .single();
+
+            if (data?.is_virtual) {
+                // Use stored URL or generate one
+                const url = data.meeting_url || `https://meet.jit.si/CorpoOriente-${appointmentId}`;
+                setVideoUrl(url);
+                // Don't auto-open, let the user click the button (requested behavior)
+                // setIsVideoOpen(true); 
+            }
         };
 
         fetchPatientData();
-    }, [user]);
+        fetchAppointmentDetails();
+    }, [user, patientId, appointmentId, isConsultationMode]); // Added appointmentId and isConsultationMode
 
     if (loading) {
         return (
@@ -192,7 +313,7 @@ const MedicalRecord = () => {
         );
     }
 
-    const patient = history?.patient;
+    const patient = medicalHistory?.patient;
 
     return (
         <div className="min-h-screen bg-gray-50/50 pb-12">
@@ -212,16 +333,28 @@ const MedicalRecord = () => {
                                 <FileText className="h-7 w-7" />
                             </div>
                             <div>
-                                <h1 className="text-2xl font-bold text-secondary">Mi Historial Médico</h1>
-                                <p className="text-muted-foreground">Expediente clínico digital y seguimiento</p>
+                                <h1 className="text-2xl font-bold text-slate-800">Expediente Psicoterapéutico</h1>
+                                <p className="text-slate-500">Historial clínico y seguimiento de sesiones</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-lg text-blue-700 border border-blue-100">
                             <User className="h-4 w-4" />
                             <span className="font-medium text-sm">
-                                Paciente: <PatientNameDisplay patientId={patientId || patient?.id || ''} className="font-semibold" />
+                                Paciente:
                             </span>
+                            <PatientNameDisplay patientId={patientId || patient?.id || ''} className="font-semibold text-sm" />
                         </div>
+
+                        {videoUrl && (
+                            <Button
+                                onClick={() => setIsVideoOpen(!isVideoOpen)}
+                                variant={isVideoOpen ? "secondary" : "default"}
+                                className="gap-2"
+                            >
+                                <Video className="h-4 w-4" />
+                                {isVideoOpen ? 'Ocultar Video' : 'Ver Videollamada'}
+                            </Button>
+                        )}
                     </div>
                 </div>
 
@@ -262,7 +395,48 @@ const MedicalRecord = () => {
                             </CardHeader>
                             <CardContent className="p-6">
                                 {isConsultationMode && patientId && (
-                                    <div className="mb-8">
+                                    <div className="mb-8 space-y-4">
+                                        {/* Embedded Video Player */}
+                                        {videoUrl && isVideoOpen && (
+                                            <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-slate-200 shadow-sm animate-in fade-in duration-500">
+                                                <div className="absolute top-2 right-2 z-10 flex gap-1">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="secondary"
+                                                        className="h-8 text-xs bg-white/90 hover:bg-white"
+                                                        onClick={() => window.open(videoUrl, '_blank')}
+                                                    >
+                                                        <ExternalLink className="h-3 w-3 mr-1" />
+                                                        Abrir en pestaña
+                                                    </Button>
+                                                </div>
+                                                <iframe
+                                                    src={videoUrl}
+                                                    className="w-full h-full border-0"
+                                                    allow="camera; microphone; display-capture; fullscreen"
+                                                />
+                                            </div>
+                                        )}
+
+                                        {videoUrl && !isVideoOpen && (
+                                            <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-8 text-center animate-in fade-in duration-500">
+                                                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                                                    <Video className="h-6 w-6" />
+                                                </div>
+                                                <h3 className="font-semibold text-slate-900">Consulta Virtual Disponible</h3>
+                                                <p className="text-sm text-slate-500 mb-4 max-w-xs mx-auto">
+                                                    Esta cita tiene una videollamada programada.
+                                                </p>
+                                                <Button
+                                                    className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 shadow-sm rounded-xl px-6 h-11"
+                                                    onClick={() => setIsVideoOpen(true)}
+                                                >
+                                                    <Video className="h-4 w-4" />
+                                                    Iniciar Videollamada
+                                                </Button>
+                                            </div>
+                                        )}
+
                                         <MedicalEntryForm
                                             patientId={patientId}
                                             appointmentId={appointmentId || undefined}
@@ -307,13 +481,12 @@ const MedicalRecord = () => {
                                     </AlertDialogContent>
                                 </AlertDialog>
 
-                                {history && (
+                                {medicalHistory || (upcomingAppointments && upcomingAppointments.length > 0) ? (
                                     <MedicalHistoryTimeline
-                                        history={history}
-                                        isReadOnly={true}
+                                        history={medicalHistory}
+                                        upcoming={upcomingAppointments}
                                     />
-                                )}
-                                {!history && (
+                                ) : (
                                     <div className="text-center py-12">
                                         <div className="bg-gray-100 h-16 w-16 rounded-full flex items-center justify-center mx-auto mb-4">
                                             <FileText className="h-8 w-8 text-gray-400" />
@@ -328,8 +501,11 @@ const MedicalRecord = () => {
 
                 </div>
             </div>
+
         </div>
     );
 };
 
 export default MedicalRecord;
+
+

@@ -35,7 +35,7 @@ export const usePayments = () => {
     }
   };
 
-  const listPayments = async (status?: string, limit: number = 50): Promise<Payment[]> => {
+  const listPayments = async (status?: 'pending' | 'paid' | 'failed' | 'refunded' | 'credit', limit: number = 50): Promise<Payment[]> => {
     setLoading(true);
     try {
       let query = supabase
@@ -74,37 +74,38 @@ export const usePayments = () => {
       // Fallback DIRECTO: Inserción sin RPC y sin columnas problemáticas
       // Omitimos 'paid_at' y 'notes' deliberadamente
 
-      // 1. Verificar si ya existe pago
-      const { data: existing } = await supabase
+      // 1. UPSERT Payment (Handles both existing pending payments from trigger or new ones)
+      // Check if payment already exists to avoid unique constraint error (42P10)
+      const { data: existingPayment } = await supabase
         .from('payments')
         .select('id')
         .eq('appointment_id', appointmentId)
         .maybeSingle();
 
-      if (existing) {
+      const paymentData = {
+        appointment_id: appointmentId,
+        status: 'paid',
+        payment_method: paymentMethod,
+        amount: amount ?? 0,
+        // currency: 'COP', // Waiting for migration
+        // updated_at: new Date().toISOString() // Waiting for migration
+      };
+
+      let error;
+      if (existingPayment) {
         const { error: updateError } = await supabase
           .from('payments')
-          .update({
-            status: 'paid',
-            payment_method: paymentMethod,
-            amount: amount
-          })
-          .eq('id', existing.id);
-
-        if (updateError) throw updateError;
+          .update(paymentData)
+          .eq('id', existingPayment.id);
+        error = updateError;
       } else {
         const { error: insertError } = await supabase
           .from('payments')
-          .insert({
-            appointment_id: appointmentId,
-            status: 'paid',
-            payment_method: paymentMethod,
-            amount: amount,
-            currency: 'USD'
-          });
-
-        if (insertError) throw insertError;
+          .insert(paymentData);
+        error = insertError;
       }
+
+      if (error) throw error;
 
       // 2. Actualizar estado de la cita
       const { error: aptError } = await supabase
@@ -167,7 +168,7 @@ export const usePayments = () => {
           status: 'paid',
           payment_method: 'credit',
           amount: credit.amount,
-          currency: 'USD'
+          currency: 'COP'
         });
 
       if (payError) throw payError;

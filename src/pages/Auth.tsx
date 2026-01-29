@@ -9,10 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Loader2, Stethoscope, UserCircle, Mail, CheckCircle, Lock, User, ArrowRight } from 'lucide-react';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Loader2, Stethoscope, UserCircle, Mail, CheckCircle, Lock, User, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { PublicNavbar } from '@/components/PublicNavbar';
-import { Footer } from '@/components/Footer';
+import { es } from 'date-fns/locale';
 
 // Esquemas de validación
 const loginSchema = z.object({
@@ -36,10 +35,13 @@ const signupSchema = z.object({
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn, signUp, resetPassword, signInWithGoogle } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetPending, setIsResetPending] = useState(false);
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
@@ -49,6 +51,11 @@ export default function Auth() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupConfirm, setSignupConfirm] = useState('');
   const [signupRole, setSignupRole] = useState<'doctor' | 'patient'>('patient');
+
+  // Visibility States
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
+  const [showSignupConfirm, setShowSignupConfirm] = useState(false);
 
   // Redirigir si ya está autenticado
   useEffect(() => {
@@ -124,44 +131,73 @@ export default function Auth() {
     setShowSuccessDialog(true);
   };
 
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      toast.error('Ingresa tu correo electrónico');
+      return;
+    }
+
+    setIsResetPending(true);
+    const { error } = await resetPassword(resetEmail);
+    setIsResetPending(false);
+
+    if (error) {
+      toast.error('Error al enviar el correo: ' + error.message);
+      return;
+    }
+
+    toast.success('Correo de recuperación enviado');
+    setShowResetDialog(false);
+    setResetEmail('');
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-teal-50 via-white to-slate-50">
+    <div className="flex flex-col bg-slate-50">
       <PublicNavbar />
 
-      <main className="flex-grow flex items-center justify-center p-4 pt-28 pb-12">
-        <Card className="w-full max-w-lg shadow-2xl border-0 overflow-hidden">
+      <main className="flex-grow flex items-center justify-center p-4 pt-24 pb-12 relative overflow-hidden">
+        {/* Background Decorative Elements */}
+        <div className="absolute top-1/4 -left-20 w-80 h-80 bg-teal-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+
+        <Card className="w-full max-w-lg shadow-[0_20px_50px_rgba(0,0,0,0.1)] border-0 overflow-hidden relative z-10 backdrop-blur-sm bg-white/95">
           {/* Header with gradient */}
-          <div className="bg-gradient-to-r from-teal-600 to-teal-700 p-8 text-center text-white">
-            <Link to="/" className="inline-block hover:opacity-90 transition-opacity">
-              <div className="bg-white/20 backdrop-blur-sm p-3 rounded-2xl w-fit mx-auto mb-4">
-                <Stethoscope className="h-10 w-10 text-white" />
+          <div className="bg-gradient-to-r from-teal-600 to-teal-700 p-6 text-center text-white relative">
+            <div className="absolute inset-0 bg-white/5 skew-x-12 transform translate-x-12" />
+            <Link to="/" className="inline-block hover:opacity-90 transition-opacity relative z-10">
+              <div className="bg-white p-2 rounded-2xl w-fit mx-auto mb-3 shadow-lg border border-teal-100">
+                <img
+                  src="/logo.png"
+                  alt="Centro Psicoterapéutico de Oriente"
+                  className="h-14 w-auto object-contain"
+                />
               </div>
-              <h1 className="text-2xl font-bold mb-1">Centro PsicoTerapéutico</h1>
-              <p className="text-teal-100 text-sm font-medium">de Oriente</p>
             </Link>
           </div>
 
-          <CardContent className="p-8">
+          <CardContent className="p-8 pb-6">
             <Tabs defaultValue="login" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-100 p-1 h-12">
-                <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">
+              <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-100/80 p-1.5 h-14 rounded-xl border border-slate-200/50">
+                <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-teal-700 font-bold transition-all text-slate-500">
                   Iniciar Sesión
                 </TabsTrigger>
-                <TabsTrigger value="signup" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm font-semibold">
+                <TabsTrigger value="signup" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-teal-700 font-bold transition-all text-slate-500">
                   Registrarse
                 </TabsTrigger>
               </TabsList>
 
               {/* Login Tab */}
-              <TabsContent value="login" className="space-y-5">
+              <TabsContent value="login" className="space-y-6">
                 <form onSubmit={handleLogin} className="space-y-5">
                   <div className="space-y-2">
                     <Label htmlFor="login-email" className="text-sm font-semibold text-slate-700">
@@ -176,11 +212,11 @@ export default function Auth() {
                         value={loginEmail}
                         onChange={e => setLoginEmail(e.target.value)}
                         disabled={isSubmitting}
-                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                        className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 transition-all bg-slate-50/50 focus:bg-white"
                       />
                     </div>
                     {errors.email && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-[11px] text-red-500 font-bold flex items-center gap-1 mt-1 uppercase tracking-wider">
                         <span className="text-xs">⚠</span> {errors.email}
                       </p>
                     )}
@@ -194,24 +230,47 @@ export default function Auth() {
                       <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                       <Input
                         id="login-password"
-                        type="password"
+                        type={showLoginPassword ? "text" : "password"}
                         placeholder="••••••••"
                         value={loginPassword}
                         onChange={e => setLoginPassword(e.target.value)}
                         disabled={isSubmitting}
-                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                        className="pl-11 pr-10 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 transition-all bg-slate-50/50 focus:bg-white"
                       />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                        onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      >
+                        {showLoginPassword ? (
+                          <EyeOff className="h-5 w-5 text-slate-400" />
+                        ) : (
+                          <Eye className="h-5 w-5 text-slate-400" />
+                        )}
+                      </Button>
                     </div>
                     {errors.password && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
+                      <p className="text-[11px] text-red-500 font-bold flex items-center gap-1 mt-1 uppercase tracking-wider">
                         <span className="text-xs">⚠</span> {errors.password}
                       </p>
                     )}
+                    <div className="flex justify-end mt-1">
+                      <Button
+                        type="button"
+                        variant="link"
+                        className="text-teal-600 font-semibold p-0 h-auto hover:text-teal-700 text-xs"
+                        onClick={() => setShowResetDialog(true)}
+                      >
+                        ¿Olvidaste tu contraseña?
+                      </Button>
+                    </div>
                   </div>
 
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-lg shadow-teal-600/30 text-white"
+                    className="w-full h-12 text-base font-bold bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-xl shadow-teal-700/20 text-white rounded-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (
@@ -230,8 +289,8 @@ export default function Auth() {
               </TabsContent>
 
               {/* Signup Tab */}
-              <TabsContent value="signup" className="space-y-5">
-                <form onSubmit={handleSignup} className="space-y-5">
+              <TabsContent value="signup" className="space-y-6">
+                <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name" className="text-sm font-semibold text-slate-700">
                       Nombre Completo
@@ -245,13 +304,11 @@ export default function Auth() {
                         value={signupName}
                         onChange={e => setSignupName(e.target.value)}
                         disabled={isSubmitting}
-                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                        className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 bg-slate-50/50"
                       />
                     </div>
                     {errors.fullName && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
-                        <span className="text-xs">⚠</span> {errors.fullName}
-                      </p>
+                      <p className="text-[11px] text-red-500 font-bold uppercase mt-1">⚠ {errors.fullName}</p>
                     )}
                   </div>
 
@@ -268,91 +325,87 @@ export default function Auth() {
                         value={signupEmail}
                         onChange={e => setSignupEmail(e.target.value)}
                         disabled={isSubmitting}
-                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
+                        className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 bg-slate-50/50"
                       />
                     </div>
                     {errors.email && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
-                        <span className="text-xs">⚠</span> {errors.email}
-                      </p>
+                      <p className="text-[11px] text-red-500 font-bold uppercase mt-1">⚠ {errors.email}</p>
                     )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password" className="text-sm font-semibold text-slate-700">
-                      Contraseña
-                    </Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
-                      <Input
-                        id="signup-password"
-                        type="password"
-                        placeholder="••••••••"
-                        value={signupPassword}
-                        onChange={e => setSignupPassword(e.target.value)}
-                        disabled={isSubmitting}
-                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
-                      />
-                    </div>
-                    {errors.password && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
-                        <span className="text-xs">⚠</span> {errors.password}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-confirm" className="text-sm font-semibold text-slate-700">
-                      Confirmar Contraseña
-                    </Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
-                      <Input
-                        id="signup-confirm"
-                        type="password"
-                        placeholder="••••••••"
-                        value={signupConfirm}
-                        onChange={e => setSignupConfirm(e.target.value)}
-                        disabled={isSubmitting}
-                        className="pl-11 h-12 border-slate-300 focus:border-teal-500 focus:ring-teal-500"
-                      />
-                    </div>
-                    {errors.confirmPassword && (
-                      <p className="text-sm text-red-600 flex items-center gap-1">
-                        <span className="text-xs">⚠</span> {errors.confirmPassword}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-3 pt-2">
-                    <Label className="text-sm font-semibold text-slate-700">Registrarme como:</Label>
-                    <RadioGroup
-                      defaultValue="patient"
-                      value={signupRole}
-                      onValueChange={(val: 'doctor' | 'patient') => setSignupRole(val)}
-                      className="grid grid-cols-2 gap-3"
-                      disabled={isSubmitting}
-                    >
-                      <div className={`flex items-center space-x-3 border-2 rounded-xl p-4 cursor-pointer transition-all ${signupRole === 'patient' ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                        <RadioGroupItem value="patient" id="patient" className="text-teal-600" />
-                        <Label htmlFor="patient" className="font-medium cursor-pointer flex items-center gap-2 flex-1">
-                          <UserCircle className="h-5 w-5 text-teal-600" />
-                          <span>Paciente</span>
-                        </Label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-password" className="text-sm font-semibold text-slate-700">
+                        Contraseña
+                      </Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="signup-password"
+                          type={showSignupPassword ? "text" : "password"}
+                          placeholder="••••••••"
+                          value={signupPassword}
+                          onChange={e => setSignupPassword(e.target.value)}
+                          disabled={isSubmitting}
+                          className="pl-10 pr-10 h-11 border-slate-200 rounded-xl text-sm focus:border-teal-500 bg-slate-50/50"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowSignupPassword(!showSignupPassword)}
+                        >
+                          {showSignupPassword ? <EyeOff className="h-4 w-4 text-slate-400" /> : <Eye className="h-4 w-4 text-slate-400" />}
+                        </Button>
                       </div>
-                      <div className={`flex items-center space-x-3 border-2 rounded-xl p-4 cursor-pointer transition-all ${signupRole === 'doctor' ? 'border-teal-600 bg-teal-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                        <RadioGroupItem value="doctor" id="doctor" className="text-teal-600" />
-                        <Label htmlFor="doctor" className="font-medium cursor-pointer flex items-center gap-2 flex-1">
-                          <Stethoscope className="h-5 w-5 text-teal-600" />
-                          <span>Médico</span>
-                        </Label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-confirm" className="text-sm font-semibold text-slate-700">
+                        Confirmar
+                      </Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
+                        <Input
+                          id="signup-confirm"
+                          type={showSignupConfirm ? "text" : "password"}
+                          placeholder="••••••••"
+                          value={signupConfirm}
+                          onChange={e => setSignupConfirm(e.target.value)}
+                          disabled={isSubmitting}
+                          className="pl-10 pr-10 h-11 border-slate-200 rounded-xl text-sm focus:border-teal-500 bg-slate-50/50"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                          onClick={() => setShowSignupConfirm(!showSignupConfirm)}
+                        >
+                          {showSignupConfirm ? <EyeOff className="h-4 w-4 text-slate-400" /> : <Eye className="h-4 w-4 text-slate-400" />}
+                        </Button>
                       </div>
-                    </RadioGroup>
+                    </div>
+                  </div>
+                  {errors.password && (
+                    <p className="text-[11px] text-red-500 font-bold uppercase mt-1">⚠ {errors.password}</p>
+                  )}
+                  {errors.confirmPassword && (
+                    <p className="text-[11px] text-red-500 font-bold uppercase mt-1">⚠ {errors.confirmPassword}</p>
+                  )}
+
+                  <div className="p-4 bg-teal-50/50 rounded-xl border border-teal-100/50 flex items-center gap-3">
+                    <UserCircle className="h-6 w-6 text-teal-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-teal-900 leading-none">Paciente</p>
+                      <p className="text-[11px] text-teal-600 mt-1">Acceso inmediato a especialistas y agenda</p>
+                    </div>
                   </div>
 
                   <Button
                     type="submit"
-                    className="w-full h-12 text-base font-semibold bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-lg shadow-teal-600/30 text-white"
+                    className="w-full h-12 text-base font-bold bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 shadow-xl shadow-teal-700/20 text-white rounded-xl transition-all"
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? (
@@ -376,44 +429,79 @@ export default function Auth() {
 
       {/* Registration Success Dialog */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-2xl border-0 shadow-2xl">
           <DialogHeader className="items-center space-y-4 pt-4">
             <div className="bg-gradient-to-br from-green-100 to-emerald-100 p-4 rounded-full">
               <CheckCircle className="h-12 w-12 text-green-600" />
             </div>
-            <DialogTitle className="text-2xl font-bold text-green-700 text-center">
+            <DialogTitle className="text-2xl font-bold text-slate-800 text-center uppercase tracking-tight">
               ¡Registro Exitoso!
             </DialogTitle>
-            <DialogDescription className="text-center text-base text-slate-600">
-              Gracias por unirte al <span className="font-semibold text-teal-700">Centro PsicoTerapéutico de Oriente</span>
+            <DialogDescription className="text-center text-base text-slate-500">
+              Gracias por unirte al <span className="font-bold text-teal-600">Centro PsicoTerapéutico de Oriente</span>
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3">
+            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-2xl flex items-start gap-3">
               <Mail className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
               <div className="space-y-1">
-                <p className="text-sm font-semibold text-blue-900">Verifica tu correo electrónico</p>
-                <p className="text-sm text-blue-700">
-                  Hemos enviado un enlace de confirmación a <span className="font-semibold">{signupEmail}</span>
+                <p className="text-sm font-bold text-blue-900">Verifica tu correo electrónico</p>
+                <p className="text-sm text-blue-700/80">
+                  Hemos enviado un enlace de confirmación a <span className="font-bold">{signupEmail}</span>
                 </p>
               </div>
             </div>
-            <p className="text-sm text-slate-600 text-center">
-              Por favor revisa tu bandeja de entrada (y la carpeta de Spam) para activar tu cuenta.
-            </p>
           </div>
 
           <Button
             onClick={() => setShowSuccessDialog(false)}
-            className="w-full h-12 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold"
+            className="w-full h-12 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg shadow-teal-600/20"
           >
             Entendido, ya reviso mi correo
           </Button>
         </DialogContent>
       </Dialog>
 
-      <Footer />
-    </div>
+      {/* Reset Password Dialog */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-0 shadow-2xl">
+          <DialogHeader className="items-center space-y-4 pt-4">
+            <div className="bg-slate-100 p-4 rounded-full text-teal-600">
+              <Lock className="h-12 w-12" />
+            </div>
+            <DialogTitle className="text-2xl font-bold text-slate-800 text-center uppercase tracking-tight">
+              Recuperar Acceso
+            </DialogTitle>
+            <DialogDescription className="text-center text-slate-500">
+              Ingresa tu correo y te enviaremos las instrucciones de restablecimiento.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleResetPassword} className="space-y-5 py-4">
+            <div className="space-y-2">
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <Input
+                  type="email"
+                  placeholder="tu@email.com"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  disabled={isResetPending}
+                  className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 bg-slate-50/50"
+                />
+              </div>
+            </div>
+            <Button
+              type="submit"
+              className="w-full h-12 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg"
+              disabled={isResetPending}
+            >
+              {isResetPending ? <Loader2 className="h-5 w-5 animate-spin" /> : "Enviar Instrucciones"}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div >
   );
 }

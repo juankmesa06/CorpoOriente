@@ -18,9 +18,10 @@ interface DoctorTask {
 
 interface DoctorTasksProps {
     className?: string;
+    hideHeader?: boolean;
 }
 
-export const DoctorTasks = ({ className }: DoctorTasksProps) => {
+export const DoctorTasks = ({ className, hideHeader = false }: DoctorTasksProps) => {
     const [tasks, setTasks] = useState<DoctorTask[]>([]);
     const [loading, setLoading] = useState(true);
     const [newTask, setNewTask] = useState('');
@@ -50,7 +51,8 @@ export const DoctorTasks = ({ className }: DoctorTasksProps) => {
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
-                setTasks(data || []);
+                // Type casting to fix lint errors
+                setTasks((data as any[] || []) as DoctorTask[]);
             }
         } catch (error) {
             console.error('Error fetching tasks:', error);
@@ -86,7 +88,7 @@ export const DoctorTasks = ({ className }: DoctorTasksProps) => {
 
             if (error) throw error;
 
-            setTasks([data, ...tasks]);
+            setTasks([data as unknown as DoctorTask, ...tasks]);
             setNewTask('');
             setNewPriority('normal');
             toast.success('Tarea agregada');
@@ -144,12 +146,14 @@ export const DoctorTasks = ({ className }: DoctorTasksProps) => {
 
     return (
         <Card className={`bg-white border-primary/20 shadow-sm h-full ${className || ''}`}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-xl text-secondary flex items-center gap-2">
-                    <PenTool className="h-5 w-5" />
-                    Tareas Pendientes
-                </CardTitle>
-            </CardHeader>
+            {!hideHeader && (
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-xl text-secondary flex items-center gap-2">
+                        <PenTool className="h-5 w-5" />
+                        Tareas Pendientes
+                    </CardTitle>
+                </CardHeader>
+            )}
             <CardContent className="space-y-4">
                 {/* Add Task Form */}
                 <div className="flex gap-2">

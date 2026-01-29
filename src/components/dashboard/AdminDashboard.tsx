@@ -12,8 +12,8 @@ import {
     Banknote,
     TrendingUp,
     DollarSign,
-    UserCheck,
-    ChevronRight
+    ChevronRight,
+    KeyRound
 } from 'lucide-react';
 import { RoomManagement } from './RoomManagement';
 import { DoctorAffiliationManager } from './DoctorAffiliationManager';
@@ -23,16 +23,18 @@ import { AdminOrganizationConfig } from './AdminOrganizationConfig';
 import { AdminAccountingReports } from './AdminAccountingReports';
 import { AdminAppointmentBooking } from './AdminAppointmentBooking';
 import { AdminPaymentManager } from './AdminPaymentManager';
+import { UserManagementPanel } from './UserManagementPanel';
+import { StaffSecurityPanel } from './StaffSecurityPanel';
 import { supabase } from '@/integrations/supabase/client';
 
-type Section = 'spaces' | 'appointments' | 'payments' | 'doctor-billing' | 'users' | 'settings-roles' | 'settings-org' | 'settings-accounting';
+type Section = 'spaces' | 'appointments' | 'payments' | 'doctor-billing' | 'users' | 'user-management' | 'settings-roles' | 'settings-org' | 'settings-accounting' | 'security';
 
 const AdminDashboard = () => {
     const [activeSection, setActiveSection] = useState<Section>('spaces');
     const [isSettingsOpen, setIsSettingsOpen] = useState(true);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [userName, setUserName] = useState('Administrador');
-    const [stats, setStats] = useState({ rooms: 0, doctors: 0, patients: 0, revenue: 0 });
+    const [stats, setStats] = useState({ rooms: 0, doctors: 0, patients: 0, availableRooms: 0, revenue: 0 });
 
     useEffect(() => {
         const checkRole = async () => {
@@ -66,11 +68,46 @@ const AdminDashboard = () => {
                     .from('patient_profiles')
                     .select('*', { count: 'exact', head: true });
 
+                // Calculate available rooms (Total - Occupied Now)
+                const now = new Date().toISOString();
+
+                // Get occupied rooms by appointments
+                const { data: occupiedByApts } = await supabase
+                    .from('appointments')
+                    .select('room_id')
+                    .lte('start_time', now)
+                    .gte('end_time', now)
+                    .not('room_id', 'is', null);
+
+                // Get occupied rooms by rentals
+                const { data: occupiedByRentals } = await supabase
+                    .from('room_rentals' as any)
+                    .select('room_id')
+                    .lte('start_time', now)
+                    .gte('end_time', now);
+
+                const occupiedIds = new Set([
+                    ...(occupiedByApts?.map((a: any) => a.room_id) || []),
+                    ...(occupiedByRentals?.map((r: any) => r.room_id) || [])
+                ]);
+
+                const totalRooms = roomCount || 0;
+                const available = Math.max(0, totalRooms - occupiedIds.size);
+
+                // Calculate total revenue
+                const { data: paymentsData } = await supabase
+                    .from('payments')
+                    .select('amount')
+                    .eq('status', 'paid');
+
+                const totalRevenue = paymentsData?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+
                 setStats({
-                    rooms: roomCount || 0,
+                    rooms: totalRooms,
                     doctors: doctorCount || 0,
                     patients: patientCount || 0,
-                    revenue: 0 // TODO: Calculate from payments
+                    availableRooms: available,
+                    revenue: totalRevenue
                 });
             }
         };
@@ -83,7 +120,7 @@ const AdminDashboard = () => {
                 return (
                     <div className="space-y-6">
                         <div>
-                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Centro de Control</h2>
+                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Centro de control</h2>
                             <p className="text-slate-600">Administra espacios, monitorea ocupación y gestiona citas desde un solo lugar.</p>
                         </div>
                         <RoomManagement />
@@ -92,33 +129,26 @@ const AdminDashboard = () => {
             case 'payments':
                 return (
                     <div className="space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Gestión de Cobros</h2>
-                            <p className="text-slate-600">Historial de pagos y registro de ingresos.</p>
-                        </div>
+
                         <AdminPaymentManager />
                     </div>
                 );
             case 'doctor-billing':
-                return (
-                    <div className="space-y-6">
-                        <div>
-                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Gestión de Médicos</h2>
-                            <p className="text-slate-600">Gestiona las membresías de especialistas y el uso de espacios.</p>
-                        </div>
-                        <DoctorAffiliationManager />
-                    </div>
-                );
+                return <DoctorAffiliationManager />;
             case 'users':
                 return (
                     <div className="space-y-6">
                         <div>
-                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Gestión de Pacientes</h2>
+                            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Gestión de pacientes</h2>
                             <p className="text-slate-600">Administra los expedientes y datos de pacientes.</p>
                         </div>
                         <AdminPatientManager />
                     </div>
                 );
+
+            case 'user-management':
+                if (!isSuperAdmin) return null;
+                return <UserManagementPanel />;
             case 'settings-roles':
                 if (!isSuperAdmin) return null;
                 return <AdminRoleManager />;
@@ -128,6 +158,8 @@ const AdminDashboard = () => {
             case 'settings-accounting':
                 if (!isSuperAdmin) return null;
                 return <AdminAccountingReports />;
+            case 'security':
+                return <StaffSecurityPanel />;
             default:
                 return null;
         }
@@ -149,66 +181,49 @@ const AdminDashboard = () => {
 
     return (
         <div className="space-y-6">
-            {/* Welcome Header */}
-            <div className="bg-gradient-to-r from-teal-600 via-teal-700 to-slate-900 rounded-2xl p-8 text-white shadow-xl">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold mb-2">¡Bienvenido, {userName}!</h1>
-                        <p className="text-teal-100">
-                            {isSuperAdmin ? 'Panel de Super Administrador' : 'Panel de Control del Sistema'}
-                        </p>
-                    </div>
-                    <div className="hidden md:block">
-                        <div className="h-20 w-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center border-2 border-white/30">
-                            <Settings className="h-10 w-10 text-white" />
+            {/* Stats Overview */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-gradient-to-br from-teal-600 to-teal-700 rounded-xl p-4 shadow-lg">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
+                            <Building2 className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="text-white">
+                            <p className="text-2xl font-bold">{stats.rooms}</p>
+                            <p className="text-xs text-teal-100">Espacios</p>
                         </div>
                     </div>
                 </div>
-
-                {/* Stats Overview */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <Building2 className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{stats.rooms}</p>
-                                <p className="text-xs text-teal-100">Espacios</p>
-                            </div>
+                <div className="bg-gradient-to-br from-teal-600 to-teal-700 rounded-xl p-4 shadow-lg">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
+                            <Stethoscope className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="text-white">
+                            <p className="text-2xl font-bold">{stats.doctors}</p>
+                            <p className="text-xs text-teal-100">Médicos</p>
                         </div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <Stethoscope className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{stats.doctors}</p>
-                                <p className="text-xs text-teal-100">Médicos</p>
-                            </div>
+                </div>
+                <div className="bg-gradient-to-br from-teal-600 to-teal-700 rounded-xl p-4 shadow-lg">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
+                            <DollarSign className="h-5 w-5 text-white" />
+                        </div>
+                        <div className="text-white">
+                            <p className="text-2xl font-bold">${(stats.revenue || 0).toLocaleString()}</p>
+                            <p className="text-xs text-teal-100">Ingresos Totales (Pagados)</p>
                         </div>
                     </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <Users className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{stats.patients}</p>
-                                <p className="text-xs text-teal-100">Pacientes</p>
-                            </div>
+                </div>
+                <div className="bg-gradient-to-br from-teal-600 to-teal-700 rounded-xl p-4 shadow-lg">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
+                            <CalendarCheck className="h-5 w-5 text-white" />
                         </div>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <TrendingUp className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">95%</p>
-                                <p className="text-xs text-teal-100">Ocupación</p>
-                            </div>
+                        <div className="text-white">
+                            <p className="text-2xl font-bold">{stats.availableRooms}</p>
+                            <p className="text-xs text-teal-100">Disponibles</p>
                         </div>
                     </div>
                 </div>
@@ -226,10 +241,16 @@ const AdminDashboard = () => {
                         </CardHeader>
                         <CardContent className="p-4">
                             <nav className="space-y-2">
-                                <NavItem section="spaces" label="Centro de Control" icon={Building2} />
-                                <NavItem section="payments" label="Gestión de Cobros" icon={Banknote} />
-                                <NavItem section="doctor-billing" label="Gestión de Médicos" icon={Stethoscope} />
-                                <NavItem section="users" label="Gestión de Pacientes" icon={Users} />
+                                <NavItem section="spaces" label="Centro de control" icon={Building2} />
+                                <NavItem section="payments" label="Gestión de cobros" icon={Banknote} />
+                                <NavItem section="doctor-billing" label="Gestión de médicos" icon={Stethoscope} />
+                                <NavItem section="users" label="Gestión de pacientes" icon={Users} />
+
+
+
+                                {isSuperAdmin && (
+                                    <NavItem section="user-management" label="Crear usuarios admin" icon={Users} />
+                                )}
 
                                 {isSuperAdmin && (
                                     <div className="pt-4 border-t mt-4">
@@ -246,13 +267,17 @@ const AdminDashboard = () => {
 
                                         {isSettingsOpen && (
                                             <div className="mt-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
-                                                <NavItem section="settings-roles" label="Roles y Permisos" icon={null} subItem />
+                                                <NavItem section="settings-roles" label="Roles y permisos" icon={null} subItem />
                                                 <NavItem section="settings-org" label="Organización" icon={null} subItem />
-                                                <NavItem section="settings-accounting" label="Reportes Contables" icon={null} subItem />
+                                                <NavItem section="settings-accounting" label="Reportes contables" icon={null} subItem />
                                             </div>
                                         )}
                                     </div>
                                 )}
+
+                                <div className="pt-4 border-t mt-4">
+                                    <NavItem section="security" label="Crear contraseña" icon={KeyRound} />
+                                </div>
                             </nav>
                         </CardContent>
                     </Card>

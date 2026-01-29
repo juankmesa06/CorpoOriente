@@ -1,14 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Stethoscope, CalendarDays, Users, Building2, AlertTriangle, MessageSquare, ClipboardCheck, ArrowRight, FolderOpen, PenTool, Phone, TrendingUp, Activity } from 'lucide-react';
+import { Stethoscope, CalendarDays, Users, Building2, AlertTriangle, MessageSquare, ClipboardCheck, ArrowRight, FolderOpen, PenTool, Phone, TrendingUp, Activity, Wallet } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { RoomRentalBooking } from '@/components/rental/RoomRentalBooking';
 import { DoctorTasks } from './DoctorTasks';
 import { DoctorRentals } from './DoctorRentals';
+import { DoctorWallet } from './DoctorWallet';
+import { DoctorRoomRentals } from './DoctorRoomRentals';
 import { DoctorPayments } from './DoctorPayments';
 import { PatientDetailsSidebar } from './PatientDetailsSidebar';
 import { DoctorActivePatients } from './DoctorActivePatients';
+import { DoctorWeeklyStats } from './DoctorWeeklyStats';
 import { PatientNameDisplay } from './PatientNameDisplay';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
@@ -16,6 +19,7 @@ import { es } from 'date-fns/locale';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { StaffSecurityPanel } from './StaffSecurityPanel';
 
 interface DoctorDashboardProps {
     isProfileIncomplete: boolean;
@@ -23,6 +27,7 @@ interface DoctorDashboardProps {
 
 const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
     const { user } = useAuth();
+    const [view, setView] = useState<'dashboard' | 'security' | 'payments'>('dashboard');
     const [isRentalDialogOpen, setIsRentalDialogOpen] = useState(false);
     const [upcomingAppointments, setUpcomingAppointments] = useState<any[]>([]);
     const [doctorName, setDoctorName] = useState('');
@@ -32,6 +37,7 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
     const [isPatientSidebarOpen, setIsPatientSidebarOpen] = useState(false);
     const [weeklyStats, setWeeklyStats] = useState<any[]>([]);
     const [totalConsultations, setTotalConsultations] = useState(0);
+    const [weeklyEarnings, setWeeklyEarnings] = useState(0);
     const [completionRate, setCompletionRate] = useState(0);
 
     const handleRentalSuccess = () => {
@@ -49,7 +55,7 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
                 setDoctorName(profile.full_name);
             }
 
-            const { data: doctorProfile } = await supabase.from('doctor_profiles').select('id').eq('user_id', user.id).maybeSingle();
+            const { data: doctorProfile } = await supabase.from('doctor_profiles').select('id, consultation_fee').eq('user_id', user.id).maybeSingle();
 
             if (doctorProfile) {
                 const { data: relationships } = await supabase
@@ -76,28 +82,35 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
+                const tomorrow = new Date(today);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+
                 const { data } = await supabase
                     .from('appointments')
-                    .select('*')
+                    .select(`
+                        *,
+                        created_at,
+                        room_rentals:rental_id (
+                            rooms (
+                                name
+                            )
+                        )
+                    `)
                     .eq('doctor_id', doctorProfile.id)
                     .gte('start_time', today.toISOString())
-                    .neq('status', 'cancelled')
+                    .lt('start_time', tomorrow.toISOString())
+                    .not('status', 'in', '("cancelled","completed")')
                     .order('start_time', { ascending: true })
                     .limit(5);
 
-                const appointmentsWithRentals = data?.map((apt: any) => ({
-                    ...apt,
-                    room_rentals: apt.rental_id ? [{ id: apt.rental_id }] : []
-                })) || [];
-
-                setUpcomingAppointments(appointmentsWithRentals);
+                setUpcomingAppointments(data || []);
 
                 const sevenDaysAgo = new Date();
                 sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
                 const { data: weeklyApts } = await supabase
                     .from('appointments')
-                    .select('start_time, status')
+                    .select('start_time, status, payments(amount)')
                     .eq('doctor_id', doctorProfile.id)
                     .gte('start_time', sevenDaysAgo.toISOString())
                     .neq('status', 'cancelled');
@@ -134,235 +147,363 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
                     setWeeklyStats(chartData);
                     setTotalConsultations(total);
                 }
+
+                // Calculate Weekly Earnings from the already fetched weeklyApts
+                if (weeklyApts) {
+                    const earnings = weeklyApts.reduce((sum, apt: any) => {
+                        // Check if appointment is valid for earnings (completed, confirmed, or paid)
+                        if (['completed', 'confirmed'].includes(apt.status) || (apt.payments && apt.payments.length > 0)) {
+                            // Use payment amount if available (with fallback for the 500 bug), otherwise use consultation fee
+                            const rawAmount = Number(apt.payments?.[0]?.amount);
+                            const paymentAmount = (rawAmount === 500)
+                                ? (doctorProfile.consultation_fee || 150000)
+                                : (rawAmount || doctorProfile.consultation_fee || 0);
+                            return sum + Number(paymentAmount);
+                        }
+                        return sum;
+                    }, 0);
+                    setWeeklyEarnings(earnings);
+                }
             }
         };
         fetchData();
     }, [user]);
 
     return (
-        <div className="space-y-6 min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 rounded-xl">
-            {/* Header Banner - Teal Theme */}
-            <div className="bg-gradient-to-r from-teal-600 via-teal-700 to-slate-900 text-white p-8 rounded-2xl shadow-xl">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-white/20 backdrop-blur-sm p-3 rounded-xl border border-white/30">
-                            <Stethoscope className="h-8 w-8 text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-3xl font-bold">Dr. {doctorName || user?.email?.split('@')[0]}</h1>
-                            <p className="text-teal-100">Panel Clínico</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-3">
-                        <div className="text-right">
-                            <p className="text-lg font-medium">{format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}</p>
-                            <p className="text-sm text-teal-100">{format(new Date(), "hh:mm a")}</p>
-                        </div>
+        <div className="space-y-8 min-h-screen bg-slate-50/50 p-6 rounded-3xl">
+            {/* Header with Greeting */}
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-slate-900 tracking-tight flex items-center gap-3">
+                        {view === 'dashboard' ? (
+                            <>
+                                Hola, Dr. {doctorName.split(' ')[0]}
+                                <span className="text-2xl animate-bounce delay-100">👋</span>
+                            </>
+                        ) : view === 'security' ? 'Seguridad y Accesos' : 'Tus Pagos y Facturación'}
+                    </h1>
+                    {view === 'dashboard' && (
+                        <p className="text-slate-500 mt-1 font-medium">Aquí tienes el resumen de tu actividad de hoy.</p>
+                    )}
+                </div>
+                <div className="flex gap-3">
+                    {view === 'dashboard' ? (
                         <Button
-                            onClick={() => setIsRentalDialogOpen(true)}
-                            className="bg-white text-teal-700 hover:bg-teal-50 font-semibold shadow-lg transition-all hover:scale-105"
+                            variant="outline"
+                            onClick={() => setView('security')}
+                            className="border-slate-200 text-slate-600 hover:bg-white hover:text-teal-600 hover:border-teal-200 transition-all rounded-full px-6 shadow-sm"
                         >
-                            <Building2 className="mr-2 h-4 w-4" />
-                            Alquilar Espacio
+                            Crear contraseña
                         </Button>
-                    </div>
-                </div>
-
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <CalendarDays className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{upcomingAppointments.length}</p>
-                                <p className="text-xs text-teal-100">Citas Próximas</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <Activity className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{totalConsultations}</p>
-                                <p className="text-xs text-teal-100">Esta Semana</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20">
-                        <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-lg bg-white/20 flex items-center justify-center">
-                                <TrendingUp className="h-5 w-5 text-white" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{completionRate}%</p>
-                                <p className="text-xs text-teal-100">Completadas</p>
-                            </div>
-                        </div>
-                    </div>
+                    ) : (
+                        <Button
+                            variant="ghost"
+                            onClick={() => setView('dashboard')}
+                            className="text-slate-600 hover:bg-slate-100 rounded-full"
+                        >
+                            <ArrowRight className="h-4 w-4 mr-2 rotate-180" />
+                            Volver al Panel
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                {/* Left Column: Agenda */}
-                <div className="md:col-span-4 space-y-6">
-                    <Card className="border-0 shadow-xl bg-white h-full">
-                        <CardHeader className="border-b bg-slate-50">
-                            <CardTitle className="text-xl text-slate-900">Próximas Citas</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            {upcomingAppointments.length === 0 ? (
-                                <div className="text-center py-8 text-slate-600">
-                                    <p>No hay citas programadas.</p>
-                                    <Button variant="link" className="mt-2 text-teal-600">Ver agenda completa</Button>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {upcomingAppointments.map((apt) => (
-                                        <div key={apt.id} className="flex items-start gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-teal-300 transition-all">
-                                            <div className="flex flex-col items-center bg-white p-3 rounded-lg shadow-sm min-w-[60px]">
-                                                <span className="font-bold text-lg text-teal-600">{format(new Date(apt.start_time), 'd')}</span>
-                                                <span className="text-xs text-slate-500 uppercase">{format(new Date(apt.start_time), 'MMM', { locale: es })}</span>
-                                            </div>
-                                            <div className="flex-1">
-                                                <p className="font-semibold text-slate-900">
-                                                    <PatientNameDisplay patientId={apt.patient_id} />
-                                                </p>
-                                                <p className="text-sm text-slate-600">{apt.notes || 'Consulta General'}</p>
-                                                <p className="text-sm font-medium text-teal-600 mt-1">{format(new Date(apt.start_time), 'HH:mm')}</p>
-                                            </div>
-                                            <div className="flex flex-col gap-2">
-                                                {apt.is_virtual ? (
-                                                    (() => {
-                                                        const now = new Date();
-                                                        const start = new Date(apt.start_time);
-                                                        const timeDiff = start.getTime() - now.getTime();
-                                                        const isTooEarly = timeDiff > 60 * 60 * 1000;
-
-                                                        return (
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                disabled={isTooEarly}
-                                                                className={`text-xs ${isTooEarly ? 'opacity-50' : 'border-teal-200 text-teal-600 hover:bg-teal-50'}`}
-                                                                onClick={() => !isTooEarly && window.open(`https://meet.jit.si/CorpoOriente-${apt.id}`, '_blank')}
-                                                            >
-                                                                Unirse
-                                                            </Button>
-                                                        );
-                                                    })()
-                                                ) : (
-                                                    (apt.rental_id || (apt.room_rentals && apt.room_rentals.length > 0) || apt.status === 'paid') ? (
-                                                        <Link to={`/medical-record?id=${apt.patient_id}&appointment_id=${apt.id}&consultation=true`}>
-                                                            <Button size="sm" className="text-xs bg-teal-600 hover:bg-teal-700 text-white">
-                                                                Iniciar Cita
-                                                            </Button>
-                                                        </Link>
-                                                    ) : (
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
-                                                            onClick={() => setSelectedAppointmentForRental({
-                                                                id: apt.id,
-                                                                patient_name: apt.patient_profiles?.profiles?.full_name || 'Paciente',
-                                                                start_time: apt.start_time,
-                                                                end_time: apt.end_time
-                                                            })}
-                                                        >
-                                                            Alquilar Espacio
-                                                        </Button>
-                                                    )
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
-
-                        <div className="p-6 border-t">
-                            <DoctorActivePatients
-                                onSelectPatient={(id) => {
-                                    setSelectedPatientId(id);
-                                    setIsPatientSidebarOpen(true);
-                                }}
-                            />
-                        </div>
-                    </Card>
-                </div>
-
-                {/* Center Column: Stats */}
-                <div className="md:col-span-4 space-y-6">
-                    <Card className="border-0 shadow-xl bg-white">
-                        <CardHeader className="border-b bg-slate-50">
-                            <CardTitle className="text-xl text-slate-900">Rendimiento Semanal</CardTitle>
-                            <CardDescription>Últimos 7 días</CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <div className="h-[200px] w-full">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={weeklyStats}>
-                                        <defs>
-                                            <linearGradient id="colorConsultas" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#0d9488" stopOpacity={0.8} />
-                                                <stop offset="95%" stopColor="#0d9488" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                                        <Tooltip
-                                            contentStyle={{ backgroundColor: 'white', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                        />
-                                        <Area type="monotone" dataKey="consultas" stroke="#0d9488" fillOpacity={1} fill="url(#colorConsultas)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 mt-6">
-                                <div className="bg-teal-50 p-4 rounded-xl border border-teal-100">
-                                    <div className="text-2xl font-bold text-teal-700">{totalConsultations}</div>
-                                    <div className="text-xs text-teal-600 font-medium">Consultas (7 días)</div>
-                                </div>
-                                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                                    <div className="text-2xl font-bold text-emerald-700">{completionRate}%</div>
-                                    <div className="text-xs text-emerald-600 font-medium">Completadas</div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Right Column: Tasks */}
-                <div className="md:col-span-4 flex flex-col gap-6">
-                    <DoctorTasks className="max-h-[350px]" />
-                    <DoctorRentals className="flex-1 min-h-[300px]" />
+            {/* Security View */}
+            <div className={view === 'security' ? 'block' : 'hidden'}>
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+                    <StaffSecurityPanel />
                 </div>
             </div>
 
-            {/* Financial Management */}
-            <div id="financial-management" className="pt-8">
-                <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                    <FolderOpen className="h-6 w-6 text-teal-600" />
-                    Gestión Financiera
-                </h2>
+            {/* Payments View */}
+            <div className={view === 'payments' ? 'block' : 'hidden'}>
                 <DoctorPayments />
             </div>
 
+            {/* Dashboard View - Fresh 2-Column Layout */}
+            <div className={view === 'dashboard' ? 'grid grid-cols-1 lg:grid-cols-12 gap-8' : 'hidden'}>
+
+                {/* LEFT COLUMN (MAIN) - 8 COLS */}
+                <div className="lg:col-span-8 space-y-8">
+
+                    {/* 1. Agenda (Moved to TOP) */}
+                    <div>
+                        <div className="flex items-center justify-between mb-4 px-1">
+                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                <CalendarDays className="h-6 w-6 text-teal-600" />
+                                Agenda del Día
+                            </h3>
+                            <span className="text-sm font-medium text-slate-500">{format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}</span>
+                        </div>
+                        <Card className="border-0 shadow-sm bg-white rounded-3xl overflow-hidden border-slate-100">
+                            <CardContent className="p-0">
+                                {upcomingAppointments.length === 0 ? (
+                                    <div className="text-center py-12 px-6">
+                                        <div className="h-16 w-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                            <CalendarDays className="h-8 w-8 text-slate-300" />
+                                        </div>
+                                        <h4 className="text-lg font-semibold text-slate-900">Agenda Libre</h4>
+                                        <p className="text-slate-500 mt-1 max-w-sm mx-auto">No tienes citas programadas para hoy.</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-slate-50">
+                                        {upcomingAppointments.map((apt) => (
+                                            <div key={apt.id} className="p-5 hover:bg-slate-50 transition-colors flex flex-col md:flex-row gap-5 items-center group">
+                                                {/* Time Badge */}
+                                                <div className="flex flex-col items-center justify-center bg-white border-2 border-slate-100 text-slate-700 rounded-2xl w-16 h-16 shrink-0 group-hover:border-teal-200 group-hover:text-teal-700 transition-colors">
+                                                    <span className="text-lg font-extrabold">
+                                                        {format(new Date(apt.start_time), 'h:mm')}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-teal-500">
+                                                        {format(new Date(apt.start_time), 'a')}
+                                                    </span>
+                                                </div>
+
+                                                {/* Info */}
+                                                <div className="flex-1 w-full text-center md:text-left">
+                                                    <h4 className="font-bold text-slate-900 text-base md:text-lg">
+                                                        <PatientNameDisplay patientId={apt.patient_id} />
+                                                    </h4>
+                                                    <div className="text-sm text-slate-500 mt-1 font-medium flex flex-col md:flex-row items-center md:items-start md:gap-2">
+                                                        <span className="text-teal-600 font-semibold uppercase text-xs tracking-wide">
+                                                            {format(new Date(apt.start_time), 'EEE, d MMM', { locale: es })}
+                                                        </span>
+                                                        <span className="hidden md:inline text-slate-300">•</span>
+                                                        <span>
+                                                            {apt.is_virtual ? 'Consulta Virtual' : (apt.notes || 'Consulta General')} {apt.room_rentals?.rooms?.name ? `• ${apt.room_rentals.rooms.name}` : ''}
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="shrink-0 w-full md:w-auto flex flex-col gap-2">
+                                                    {/* Hide Rental button if it's a patient appointment OR it's already paid/confirmed/rented */}
+                                                    {(apt.rental_id || (apt.room_rentals && apt.room_rentals.length > 0) || apt.status === 'paid' || apt.status === 'confirmed' || apt.patient_id) ? (
+                                                        (() => {
+                                                            const startTime = new Date(apt.start_time).getTime();
+                                                            const now = new Date().getTime();
+                                                            const fiveMinutes = 5 * 60 * 1000;
+                                                            const isTooEarly = now < (startTime - fiveMinutes);
+
+                                                            if (isTooEarly) {
+                                                                return (
+                                                                    <div className="relative group/tooltip">
+                                                                        <Button disabled className="w-full md:w-auto rounded-xl bg-slate-100 text-slate-400 h-10 px-5 text-sm font-medium cursor-not-allowed">
+                                                                            {apt.is_virtual ? 'Iniciar Consulta' : 'Iniciar Consulta'}
+                                                                        </Button>
+                                                                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover/tooltip:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                                                                            Habilitado 5 min antes
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            return (
+                                                                <Link to={`/medical-record?id=${apt.patient_id}&appointment_id=${apt.id}&consultation=true`} className="w-full md:w-auto">
+                                                                    <Button className="w-full md:w-auto rounded-xl bg-slate-900 text-white hover:bg-teal-600 transition-colors h-10 px-5 text-sm font-medium">
+                                                                        {apt.is_virtual ? 'Iniciar Consulta' : 'Iniciar Consulta'}
+                                                                    </Button>
+                                                                </Link>
+                                                            );
+                                                        })()
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            className="w-full md:w-auto rounded-xl border-amber-200 text-amber-500 hover:bg-amber-50 h-10 px-5 text-sm font-medium"
+                                                            onClick={() => {
+                                                                setSelectedAppointmentForRental({
+                                                                    id: apt.id,
+                                                                    patient_name: apt.patient_profiles?.profiles?.full_name || 'Paciente',
+                                                                    start_time: apt.start_time,
+                                                                    end_time: apt.end_time
+                                                                });
+                                                                setIsRentalDialogOpen(true);
+                                                            }}
+                                                        >
+                                                            Alquilar
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    <div id="finances">
+                        <div className="flex items-center justify-between mb-4 px-1">
+                            <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <Wallet className="h-5 w-5 text-indigo-600" />
+                                Finanzas
+                            </h3>
+                            <div className="flex gap-2">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 font-bold text-[10px] gap-1.5"
+                                    onClick={() => setView('payments')}
+                                >
+                                    <Wallet className="h-3 w-3" />
+                                    VER PAGOS
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 bg-green-50 text-green-700 border-green-200 hover:bg-green-100 font-bold text-[10px] gap-1.5"
+                                    onClick={() => window.open('https://wa.me/573123456789?text=Hola,%20necesito%20soporte%20con%20un%20reclamo%20de%20pagos.', '_blank')}
+                                >
+                                    <MessageSquare className="h-3 w-3" />
+                                    RECLAMOS / SOPORTE
+                                </Button>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-1 overflow-hidden transition-all hover:shadow-md">
+                            <DoctorWallet />
+                        </div>
+                    </div>
+
+                    {/* 3. Stats Row (Bottom) */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-full">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                                    <Activity className="h-5 w-5" />
+                                </div>
+                                <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Semanal</span>
+                            </div>
+                            <div>
+                                <p className="text-3xl font-bold text-slate-900">{totalConsultations}</p>
+                                <p className="text-xs text-slate-400 mt-1">Consultas realizadas</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-full">
+                            <div className="flex items-center gap-3 mb-2">
+                                <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                                    <TrendingUp className="h-5 w-5" />
+                                </div>
+                                <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Efectividad</span>
+                            </div>
+                            <div>
+                                <p className="text-3xl font-bold text-slate-900">{completionRate}%</p>
+                                <p className="text-xs text-slate-400 mt-1">Tasa de finalización</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-center items-center text-center cursor-pointer hover:bg-slate-50 transition-colors group h-full" onClick={() => {
+                            setSelectedAppointmentForRental(null);
+                            setIsRentalDialogOpen(true);
+                        }}>
+                            <div className="p-4 bg-teal-50 rounded-full text-teal-600 group-hover:scale-110 transition-transform mb-3">
+                                <Building2 className="h-7 w-7" />
+                            </div>
+                            <p className="font-bold text-teal-700 text-sm">Reservar Espacio</p>
+                        </div>
+                    </div>
+                    {/* Weekly Activity Chart */}
+                    <DoctorWeeklyStats />
+                </div>
+
+                {/* RIGHT COLUMN (SIDEBAR) - 4 COLS */}
+                <div className="lg:col-span-4 space-y-8">
+
+                    {/* NEW: Independent Rental Card */}
+                    <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-xl shadow-slate-200 hover:scale-[1.02] transition-transform duration-300">
+                        {/* Background Decoration */}
+                        <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-teal-500/20 blur-3xl"></div>
+                        <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-40 h-40 rounded-full bg-indigo-500/20 blur-2xl"></div>
+
+                        <div className="relative z-10 p-8 flex flex-col items-start gap-6 h-full">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/10 shadow-inner">
+                                    <Building2 className="h-8 w-8 text-teal-300" />
+                                </div>
+                                <h3 className="text-xl font-bold text-white leading-tight">¿Necesitas un<br />Consultorio?</h3>
+                            </div>
+
+                            <p className="text-slate-300 text-sm leading-relaxed">
+                                Reserva espacios por horas para tus consultas privadas o eventos médicos, sin necesidad de asociarlo a una cita.
+                            </p>
+
+                            <Button
+                                onClick={() => {
+                                    setSelectedAppointmentForRental(null);
+                                    setIsRentalDialogOpen(true);
+                                }}
+                                className="w-full bg-white text-slate-900 hover:bg-teal-50 transition-colors font-bold h-12 rounded-xl"
+                            >
+                                Reservar Ahora
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* My Room Rentals List */}
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
+                        <DoctorRoomRentals />
+                    </div>
+
+                    {/* Active Patients */}
+                    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-all">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                                <Users className="h-5 w-5 text-indigo-500" />
+                                Pacientes Activos
+                            </h3>
+                            <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide">EN SALA</span>
+                        </div>
+                        <p className="text-sm text-slate-500 mb-6">Gestiona tus pacientes actuales sin salir del panel.</p>
+                        <DoctorActivePatients
+                            onSelectPatient={(id) => {
+                                setSelectedPatientId(id);
+                                setIsPatientSidebarOpen(true);
+                            }}
+                            hideHeader={true}
+                        />
+                    </div>
+
+                    {/* Tasks */}
+                    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
+                        <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                            <ClipboardCheck className="h-5 w-5 text-teal-600" />
+                            Tus Pendientes
+                        </h3>
+                        <DoctorTasks className="shadow-none border-0 bg-transparent" hideHeader={true} />
+                    </div>
+
+                    {/* NEW: General Support / Reception Card */}
+                    <div className="bg-emerald-50 rounded-3xl p-6 border border-emerald-100">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
+                                <Phone className="h-5 w-5" />
+                            </div>
+                            <h3 className="font-bold text-emerald-900">Atención al Médico</h3>
+                        </div>
+                        <p className="text-sm text-emerald-700/80 mb-4">¿Tienes alguna duda o reclamo? Comunícate directamente con recepción.</p>
+                        <Button
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl h-10 gap-2 shadow-sm"
+                            onClick={() => window.open('https://wa.me/573123456789?text=Hola,%20soy%20el%20Dr.%20necesito%20comunicarme%20con%20recepción.', '_blank')}
+                        >
+                            <MessageSquare className="h-4 w-4" />
+                            Contactar Recepción
+                        </Button>
+                    </div>
+
+                </div>
+            </div>
+
             {/* Dialogs */}
-            <Dialog open={!!selectedAppointmentForRental} onOpenChange={(open) => !open && setSelectedAppointmentForRental(null)}>
+            <Dialog open={isRentalDialogOpen} onOpenChange={setIsRentalDialogOpen}>
                 <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Confirmar Espacio para Cita</DialogTitle>
+                        <DialogTitle>Reserva de Espacios</DialogTitle>
                     </DialogHeader>
-                    {selectedAppointmentForRental && (
-                        <RoomRentalBooking
-                            appointment={selectedAppointmentForRental}
-                            onSuccess={handleRentalSuccess}
-                        />
-                    )}
+                    {/* Always render RoomRentalBooking, it handles null appointment inside now */}
+                    <RoomRentalBooking
+                        appointment={selectedAppointmentForRental}
+                        onSuccess={handleRentalSuccess}
+                    />
                 </DialogContent>
             </Dialog>
 
@@ -371,7 +512,7 @@ const DoctorDashboard = ({ isProfileIncomplete }: DoctorDashboardProps) => {
                 onOpenChange={setIsPatientSidebarOpen}
                 patientId={selectedPatientId}
             />
-        </div>
+        </div >
     );
 };
 

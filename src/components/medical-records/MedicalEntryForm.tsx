@@ -8,9 +8,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Stethoscope, Activity, FileText, ClipboardList, PenTool } from "lucide-react";
+import { Loader2, Stethoscope, Activity, FileText, ClipboardList, PenTool, Pill, Calendar as CalendarIcon } from "lucide-react";
 import { CreateEntryInput, MedicalEntry, VitalSigns } from "@/hooks/useMedicalRecords";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
+import { DoctorAgendaSelector } from "@/components/appointments/DoctorAgendaSelector";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/hooks/useAuth";
 
 const formSchema = z.object({
   type: z.enum(["consultation", "evolution", "notes"]),
@@ -18,6 +23,8 @@ const formSchema = z.object({
   diagnosis: z.string().optional(),
   evolution: z.string().optional(),
   treatment_plan: z.string().optional(),
+  prescription: z.string().optional(),
+  followUpDate: z.string().optional(),
   observations: z.string().optional(),
   blood_pressure: z.string().optional(),
   heart_rate: z.string().optional(),
@@ -33,7 +40,7 @@ interface MedicalEntryFormProps {
   patientId: string;
   appointmentId?: string;
   existingEntry?: MedicalEntry;
-  onSubmit: (data: CreateEntryInput) => Promise<void>;
+  onSubmit: (data: CreateEntryInput & { followUpDate?: string }) => Promise<void>;
   onCancel: () => void;
   isLoading?: boolean;
 }
@@ -46,7 +53,10 @@ export const MedicalEntryForm = ({
   onCancel,
   isLoading = false
 }: MedicalEntryFormProps) => {
-  const [activeTab, setActiveTab] = useState<"consultation" | "evolution" | "notes">("consultation");
+  const { user } = useAuth();
+  const [showAgenda, setShowAgenda] = useState(false);
+  const [wantsFollowUp, setWantsFollowUp] = useState(!!existingEntry?.appointment_date); // or false default
+
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -56,6 +66,8 @@ export const MedicalEntryForm = ({
       diagnosis: existingEntry?.diagnosis || "",
       evolution: existingEntry?.evolution || "",
       treatment_plan: existingEntry?.treatment_plan || "",
+      prescription: "",
+      followUpDate: "",
       observations: existingEntry?.observations || "",
       blood_pressure: existingEntry?.vital_signs?.blood_pressure || "",
       heart_rate: existingEntry?.vital_signs?.heart_rate?.toString() || "",
@@ -76,62 +88,131 @@ export const MedicalEntryForm = ({
     if (values.height) vital_signs.height = parseFloat(values.height);
     if (values.oxygen_saturation) vital_signs.oxygen_saturation = parseInt(values.oxygen_saturation);
 
-    const data: CreateEntryInput = {
+    // Combine treatment plan and prescription if needed, or pass as part of the data
+    let treatmentPlanCombined = values.treatment_plan || "";
+    if (values.prescription) {
+      treatmentPlanCombined += `\n\n[Manejo Farmacológico]\n${values.prescription}`;
+    }
+
+    const data: CreateEntryInput & { followUpDate?: string } = {
       patient_id: patientId,
       appointment_id: appointmentId,
       chief_complaint: values.chief_complaint,
       diagnosis: values.diagnosis || undefined,
       evolution: values.evolution || undefined,
-      treatment_plan: values.treatment_plan || undefined,
+      treatment_plan: treatmentPlanCombined || undefined, // Use combined value
       observations: values.observations || undefined,
       vital_signs: Object.keys(vital_signs).length > 0 ? vital_signs : undefined,
+      followUpDate: values.followUpDate || undefined
     };
 
     await onSubmit(data);
   };
 
   return (
-    <Card className="border-primary/10 shadow-lg bg-white/50 backdrop-blur-sm">
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-xl text-primary">
+    <Card className="border-teal-100 shadow-lg bg-white/80 backdrop-blur-sm">
+      <CardHeader className="pb-2 border-b border-teal-50">
+        <CardTitle className="flex items-center gap-2 text-xl text-teal-700">
           <Stethoscope className="h-6 w-6" />
-          {existingEntry ? "Actualizar Entrada Clínica" : "Nueva Entrada Clínica"}
+          {existingEntry ? "Actualizar Registro de Sesión" : "Nueva Sesión Terapéutica"}
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-6">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
 
-            <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6 bg-primary/5 p-1 h-auto">
-                <TabsTrigger value="consultation" className="data-[state=active]:bg-white data-[state=active]:shadow-sm py-2">
-                  <ClipboardList className="w-4 h-4 mr-2" />
-                  Consulta
-                </TabsTrigger>
-                <TabsTrigger value="evolution" className="data-[state=active]:bg-white data-[state=active]:shadow-sm py-2">
-                  <Activity className="w-4 h-4 mr-2" />
-                  Evolución
-                </TabsTrigger>
-                <TabsTrigger value="notes" className="data-[state=active]:bg-white data-[state=active]:shadow-sm py-2">
-                  <FileText className="w-4 h-4 mr-2" />
-                  Notas
-                </TabsTrigger>
-              </TabsList>
+            {/* Header Section: Theme */}
+            <div className="bg-slate-50/50 p-4 rounded-lg border border-slate-100">
+              <FormField
+                control={form.control}
+                name="chief_complaint"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-800 font-semibold flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-teal-600" />
+                      Temática Principal / Motivo de Consulta
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Ej: Ansiedad generalizada, conflicto familiar relevante..."
+                        className="bg-white border-slate-200 focus-visible:ring-teal-500 font-medium"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-              <div className="space-y-6">
-                {/* Common Fields for all tabs (Motivo usually essential) */}
+
+
+            {console.log('Rendering Agenda Selector with doctorId:', user?.id)}
+            <DoctorAgendaSelector
+              doctorId={user?.id || ''}
+              isOpen={showAgenda}
+              onClose={() => setShowAgenda(false)}
+              onSelectSlot={(date) => {
+                form.setValue("followUpDate", date);
+                setShowAgenda(false); // Close agenda after selection
+              }}
+            />
+
+            {/* Narrative Section - The Core of the Session */}
+            <div className="space-y-4">
+              <FormField
+                control={form.control}
+                name="evolution"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-700 font-medium flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-teal-600" />
+                      Desarrollo de la Sesión (Narrativa)
+                    </FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Describa el desarrollo de la sesión, intervenciones realizadas, respuestas del paciente y eventos significativos..."
+                        className="min-h-[200px] bg-white border-slate-200 resize-y focus-visible:ring-teal-500 leading-relaxed"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Clinical Analysis & Plan Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <FormField
+                control={form.control}
+                name="diagnosis"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-slate-700 font-medium">Análisis / Impresión Diagnóstica</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Interpretación clínica, evaluación del estado mental..."
+                        className="min-h-[120px] bg-white border-slate-200 resize-none focus-visible:ring-teal-500"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="chief_complaint"
+                  name="treatment_plan"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-secondary font-medium">
-                        {activeTab === 'evolution' ? 'Resumen de Evolución' : 'Motivo de Consulta / Título'} *
-                      </FormLabel>
+                      <FormLabel className="text-slate-700 font-medium">Intervención / Tareas / Acuerdos</FormLabel>
                       <FormControl>
-                        <Input
-                          placeholder={activeTab === 'evolution' ? "Breve estado del paciente..." : "Dolor de cabeza, Chequeo general..."}
-                          className="bg-white"
+                        <Textarea
+                          placeholder="Técnicas sugeridas, tareas para casa, plan para próxima sesión..."
+                          className="min-h-[100px] bg-white border-slate-200 resize-none focus-visible:ring-teal-500"
                           {...field}
                         />
                       </FormControl>
@@ -140,96 +221,66 @@ export const MedicalEntryForm = ({
                   )}
                 />
 
-                <TabsContent value="consultation" className="space-y-4 animate-in fade-in-50 duration-300">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="diagnosis"
-                      render={({ field }) => (
-                        <FormItem className="md:col-span-2">
-                          <FormLabel>Diagnóstico</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Diagnóstico clínico..."
-                              className="min-h-[80px] bg-white resize-none"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="treatment_plan"
-                      render={({ field }) => (
-                        <FormItem className="md:col-span-2">
-                          <FormLabel>Plan de Tratamiento</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Medicamentos, reposo, indicaciones..."
-                              className="min-h-[100px] bg-white resize-none"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                </TabsContent>
-
-                <TabsContent value="evolution" className="space-y-4 animate-in fade-in-50 duration-300">
-                  <FormField
-                    control={form.control}
-                    name="evolution"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Detalle de Evolución</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Cambios en el estado del paciente, respuesta al tratamiento..."
-                            className="min-h-[150px] bg-white resize-none"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </TabsContent>
-
-                <TabsContent value="notes" className="space-y-4 animate-in fade-in-50 duration-300">
-                  <FormField
-                    control={form.control}
-                    name="observations"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Observaciones Adicionales</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Notas privadas, recordatorios..."
-                            className="min-h-[150px] bg-white resize-none"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </TabsContent>
+                <FormField
+                  control={form.control}
+                  name="prescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-slate-700 font-medium flex items-center gap-2">
+                        <Pill className="h-4 w-4 text-teal-600" />
+                        Manejo Farmacológico (Receta)
+                      </FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Medicamentos recetados, dosis y frecuencia..."
+                          className="min-h-[80px] bg-white border-slate-200 resize-none focus-visible:ring-teal-500"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
-            </Tabs>
+            </div>
 
-            <Separator className="my-6" />
+            {/* Private Notes Section */}
+            <div className="bg-amber-50/50 p-4 rounded-lg border border-amber-100/50">
+              <FormField
+                control={form.control}
+                name="observations"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-amber-800 font-medium flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-amber-600" />
+                      Notas Psicoterapéuticas (Privadas)
+                    </FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Anotaciones personales, contratransferencia, hipótesis a explorar..."
+                        className="min-h-[100px] bg-white border-amber-200/50 focus-visible:ring-amber-500 resize-none placeholder:text-amber-300"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
-            {/* Vital Signs - Always visible but collapsible option could be nice. For now just distinct section */}
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-              <h3 className="text-sm font-semibold flex items-center gap-2 mb-4 text-secondary">
-                <Activity className="h-4 w-4 text-primary" />
-                Signos Vitales
-              </h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <Separator className="my-6 bg-slate-100" />
+
+            {/* Vital Signs - Softened and Collapsible-ish look */}
+            <details className="group bg-slate-50 rounded-lg border border-slate-100 open:bg-white open:shadow-sm transition-all duration-200">
+              <summary className="cursor-pointer p-4 flex items-center justify-between text-sm font-semibold text-slate-600 hover:text-teal-700 transition-colors list-none">
+                <span className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-teal-500" />
+                  Registro Fisiológico (Opcional)
+                </span>
+                <Stethoscope className="h-4 w-4 text-slate-400 group-open:rotate-180 transition-transform" />
+              </summary>
+
+              <div className="p-4 pt-0 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 animate-in slide-in-from-top-2">
                 <FormField
                   control={form.control}
                   name="blood_pressure"
@@ -308,15 +359,76 @@ export const MedicalEntryForm = ({
                   )}
                 />
               </div>
+            </details>
+
+            {/* Next Appointment Section (Moved to Bottom) */}
+            <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 space-y-4">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="followup"
+                  checked={wantsFollowUp}
+                  onCheckedChange={(checked) => {
+                    const isChecked = checked === true;
+                    setWantsFollowUp(isChecked);
+                    if (!isChecked) {
+                      form.setValue("followUpDate", "");
+                    }
+                  }}
+                />
+                <label
+                  htmlFor="followup"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-blue-900"
+                >
+                  Requiere Seguimiento / Continuar Tratamiento
+                </label>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="followUpDate"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel className="text-blue-800 font-medium flex items-center gap-2">
+                      <CalendarIcon className="h-4 w-4 text-blue-600" />
+                      Próxima Sesión
+                    </FormLabel>
+                    <div className="flex gap-2">
+                      <FormControl>
+                        <Input
+                          value={field.value ? format(new Date(field.value), "EEEE d 'de' MMMM - h:mm a", { locale: es }) : ''}
+                          placeholder="Seleccione un horario de la agenda..."
+                          readOnly
+                          className="bg-white border-blue-200 focus-visible:ring-blue-500 font-medium"
+                        />
+                      </FormControl>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                        onClick={() => setShowAgenda(true)}
+                        disabled={!wantsFollowUp}
+                      >
+                        Ver Agenda
+                      </Button>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-1">
+                      {field.value
+                        ? "Cita programada. El paciente recibirá notificación de pago (24h)."
+                        : "Seleccione 'Ver Agenda' para buscar disponibilidad."}
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="ghost" onClick={onCancel} className="hover:bg-red-50 hover:text-red-600">
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-50">
+              <Button type="button" variant="ghost" onClick={onCancel} className="text-slate-500 hover:bg-red-50 hover:text-red-600">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isLoading} className="bg-primary hover:bg-primary/90 text-white min-w-[150px]">
+              <Button type="submit" disabled={isLoading} className="bg-teal-600 hover:bg-teal-700 text-white min-w-[150px] shadow-sm">
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {existingEntry ? "Guardar Cambios" : "Guardar Entrada"}
+                {existingEntry ? "Guardar Sesión" : "Finalizar Sesión"}
               </Button>
             </div>
           </form>

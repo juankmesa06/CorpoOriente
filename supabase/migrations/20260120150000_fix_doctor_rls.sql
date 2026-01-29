@@ -1,4 +1,5 @@
 -- Fix RLS: Allow Doctors to view Payments for their appointments
+DROP POLICY IF EXISTS "Doctors can view payments for their appointments" ON public.payments;
 CREATE POLICY "Doctors can view payments for their appointments"
   ON public.payments FOR SELECT
   TO authenticated
@@ -12,6 +13,7 @@ CREATE POLICY "Doctors can view payments for their appointments"
   );
 
 -- Fix RLS: Allow Doctors to view Profiles of their patients (to see names)
+DROP POLICY IF EXISTS "Doctors can view profiles of their patients" ON public.profiles;
 CREATE POLICY "Doctors can view profiles of their patients"
   ON public.profiles FOR SELECT
   TO authenticated

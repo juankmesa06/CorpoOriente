@@ -1,5 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { ReceptionistProfile } from '../profile/ReceptionistProfile';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -23,7 +32,9 @@ import {
     Stethoscope,
     Bell,
     Activity,
-    UserCog
+    UserCog,
+    KeyRound,
+    MessageCircle
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -34,12 +45,13 @@ import { AdminAppointmentBooking } from './AdminAppointmentBooking';
 import { RoomRentalBooking } from '../rental/RoomRentalBooking';
 import { ReceptionistDoctorManager } from './ReceptionistDoctorManager';
 import { ReceptionistAppointmentManager } from './ReceptionistAppointmentManager';
+import { StaffSecurityPanel } from './StaffSecurityPanel';
 
 interface Appointment {
     id: string;
     start_time: string;
     end_time: string;
-    status: string;
+    status: 'scheduled' | 'confirmed' | 'checked_in' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
     notes: string | null;
     patient_id: string;
     doctor_id: string;
@@ -62,7 +74,7 @@ interface Stats {
     checkedIn: number;
 }
 
-type Section = 'overview' | 'appointments' | 'patients' | 'doctors' | 'rentals';
+type Section = 'overview' | 'appointments' | 'patients' | 'doctors' | 'rentals' | 'security' | 'profile';
 
 const ReceptionistDashboard = () => {
     const [activeSection, setActiveSection] = useState<Section>('overview');
@@ -76,6 +88,7 @@ const ReceptionistDashboard = () => {
         cancelled: 0,
         checkedIn: 0
     });
+    const [confirmAction, setConfirmAction] = useState<{ id: string, name: string } | null>(null);
 
     useEffect(() => {
         loadTodayAppointments();
@@ -154,7 +167,7 @@ const ReceptionistDashboard = () => {
                     specialty: doctorProfile?.specialty
                 }
             };
-        }) || [];
+        }) as Appointment[] || [];
 
         setAppointments(appointmentsWithProfiles);
 
@@ -169,16 +182,20 @@ const ReceptionistDashboard = () => {
         setLoading(false);
     };
 
-    const handleCheckIn = async (appointmentId: string) => {
+
+
+    const handleStatusUpdate = async (appointmentId: string, newStatus: string) => {
         const { error } = await supabase
             .from('appointments')
-            .update({ status: 'checked_in' })
+            .update({ status: newStatus } as any)
             .eq('id', appointmentId);
 
         if (error) {
-            toast.error('Error al hacer check-in');
+            toast.error('Error al actualizar estado');
         } else {
-            toast.success('✅ Paciente registrado en sala de espera');
+            const msg = newStatus === 'confirmed' ? '✅ Asistencia confirmada' : '❌ Cita marcada como cancelada/no asiste';
+            toast.success(msg);
+            setConfirmAction(null);
             loadTodayAppointments();
         }
     };
@@ -238,12 +255,7 @@ const ReceptionistDashboard = () => {
                         {format(new Date(), "EEEE, d 'de' MMMM 'de' yyyy", { locale: es })}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 bg-teal-50 px-4 py-2 rounded-lg border border-teal-200">
-                    <Clock className="h-5 w-5 text-teal-600" />
-                    <span className="text-lg font-semibold text-teal-900">
-                        {format(new Date(), 'HH:mm')}
-                    </span>
-                </div>
+
             </div>
 
             {/* Search Bar */}
@@ -322,7 +334,7 @@ const ReceptionistDashboard = () => {
                         <CardHeader className="bg-gradient-to-r from-teal-50 to-white border-b border-teal-100">
                             <CardTitle className="flex items-center gap-2 text-xl">
                                 <Activity className="h-5 w-5 text-teal-600" />
-                                Agenda del Día ({filteredAppointments.length})
+                                Agenda del Día ({searchQuery ? filteredAppointments.length : stats.total})
                             </CardTitle>
                             <CardDescription>
                                 Todas las citas programadas para hoy
@@ -359,7 +371,7 @@ const ReceptionistDashboard = () => {
                                                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                                                             <div className="flex items-center gap-1">
                                                                 <Clock className="h-3 w-3" />
-                                                                <span>{format(parseISO(apt.start_time), 'HH:mm')}</span>
+                                                                <span>{format(parseISO(apt.start_time), 'hh:mm a')}</span>
                                                             </div>
                                                             <div className="flex items-center gap-1">
                                                                 <Stethoscope className="h-3 w-3" />
@@ -375,17 +387,35 @@ const ReceptionistDashboard = () => {
                                                     </div>
                                                 </div>
 
-                                                {/* Quick Actions */}
-                                                {apt.status === 'scheduled' || apt.status === 'confirmed' ? (
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() => handleCheckIn(apt.id)}
-                                                        className="bg-teal-600 hover:bg-teal-700 flex-shrink-0"
-                                                    >
-                                                        <UserCheck className="h-4 w-4 mr-1" />
-                                                        Check-in
-                                                    </Button>
-                                                ) : null}
+                                                {/* Quick Actions - Confirmation instead of Check-in */}
+                                                <div className="flex items-center gap-2">
+                                                    {apt.patient_profile?.phone && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            className="text-green-600 border-green-200 hover:bg-green-50 hover:text-green-700"
+                                                            onClick={() => {
+                                                                const phone = apt.patient_profile?.phone?.replace(/\D/g, '') || '';
+                                                                const message = `Hola ${apt.patient_profile?.full_name}, le recordamos su cita hoy a las ${format(parseISO(apt.start_time), 'hh:mm a')} con el/la Dr(a). ${apt.doctor_profile?.full_name} en Centro Psicoterapéutico de Oriente.`;
+                                                                window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+                                                            }}
+                                                            title="Enviar recordatorio por WhatsApp"
+                                                        >
+                                                            <MessageCircle className="h-4 w-4" />
+                                                        </Button>
+                                                    )}
+
+                                                    {apt.status === 'scheduled' ? (
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => setConfirmAction({ id: apt.id, name: apt.patient_profile?.full_name || 'Paciente' })}
+                                                            className="bg-blue-600 hover:bg-blue-700 flex-shrink-0"
+                                                        >
+                                                            <UserCheck className="h-4 w-4 mr-1" />
+                                                            Confirmar
+                                                        </Button>
+                                                    ) : null}
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -395,10 +425,39 @@ const ReceptionistDashboard = () => {
                     </Card>
                 </div>
 
+                {/* Confirmation Dialog */}
+                <Dialog open={!!confirmAction} onOpenChange={(open) => !open && setConfirmAction(null)}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Confirmar Asistencia</DialogTitle>
+                            <DialogDescription>
+                                ¿El paciente <strong>{confirmAction?.name}</strong> ha confirmado que asistirá a la cita?
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter className="flex gap-2 sm:justify-center">
+                            <Button
+                                variant="destructive"
+                                onClick={() => confirmAction && handleStatusUpdate(confirmAction.id, 'cancelled')}
+                            >
+                                <XCircle className="mr-2 h-4 w-4" />
+                                No Vendrá / Cancelar
+                            </Button>
+                            <Button
+                                className="bg-green-600 hover:bg-green-700"
+                                onClick={() => confirmAction && handleStatusUpdate(confirmAction.id, 'confirmed')}
+                            >
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                Sí, Confirmar
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+
+
                 {/* Sidebar */}
-                <div className="space-y-4">
+                < div className="space-y-4" >
                     {/* Próximas Llegadas */}
-                    <Card className="border-blue-200 shadow-sm">
+                    < Card className="border-blue-200 shadow-sm" >
                         <CardHeader className="bg-gradient-to-r from-blue-50 to-white border-b border-blue-100 pb-3">
                             <CardTitle className="flex items-center gap-2 text-lg">
                                 <Bell className="h-4 w-4 text-blue-600" />
@@ -421,7 +480,7 @@ const ReceptionistDashboard = () => {
                                                     {apt.patient_profile?.full_name}
                                                 </p>
                                                 <p className="text-xs text-blue-700">
-                                                    {format(parseISO(apt.start_time), 'HH:mm')}
+                                                    {format(parseISO(apt.start_time), 'hh:mm a')}
                                                 </p>
                                             </div>
                                         </div>
@@ -429,10 +488,10 @@ const ReceptionistDashboard = () => {
                                 </div>
                             )}
                         </CardContent>
-                    </Card>
+                    </Card >
 
                     {/* Sala de Espera */}
-                    <Card className="border-yellow-200 shadow-sm">
+                    < Card className="border-yellow-200 shadow-sm" >
                         <CardHeader className="bg-gradient-to-r from-yellow-50 to-white border-b border-yellow-100 pb-3">
                             <CardTitle className="flex items-center gap-2 text-lg">
                                 <Users className="h-4 w-4 text-yellow-600" />
@@ -460,7 +519,7 @@ const ReceptionistDashboard = () => {
                                                         {apt.patient_profile?.full_name}
                                                     </p>
                                                     <p className="text-xs text-yellow-700">
-                                                        {format(parseISO(apt.start_time), 'HH:mm')} - {apt.doctor_profile?.full_name}
+                                                        {format(parseISO(apt.start_time), 'hh:mm a')} - {apt.doctor_profile?.full_name}
                                                     </p>
                                                 </div>
                                             </div>
@@ -470,10 +529,10 @@ const ReceptionistDashboard = () => {
                                 </div>
                             )}
                         </CardContent>
-                    </Card>
-                </div>
-            </div>
-        </div>
+                    </Card >
+                </div >
+            </div >
+        </div >
     );
 
     const renderContent = () => {
@@ -520,6 +579,18 @@ const ReceptionistDashboard = () => {
                         <ReceptionistDoctorManager />
                     </div>
                 );
+            case 'security':
+                return <StaffSecurityPanel />;
+            case 'profile':
+                return (
+                    <div className="space-y-6">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight text-gray-900">Mi Perfil</h2>
+                            <p className="text-muted-foreground">Actualiza tu foto e información de contacto.</p>
+                        </div>
+                        <ReceptionistProfile />
+                    </div>
+                );
             default:
                 return null;
         }
@@ -554,6 +625,10 @@ const ReceptionistDashboard = () => {
                         <NavItem section="patients" label="Gestión de Pacientes" icon={Users} />
                         <NavItem section="doctors" label="Gestión de Médicos" icon={UserCog} />
                         <NavItem section="rentals" label="Alquiler de Espacios" icon={Building2} />
+                        <div className="pt-2">
+                            <NavItem section="security" label="Crear contraseña" icon={KeyRound} />
+                            <NavItem section="profile" label="Mi Perfil" icon={User} />
+                        </div>
                     </nav>
 
                     <div className="px-4 py-4 mt-8 bg-teal-50 rounded-xl mx-2 border border-teal-100">

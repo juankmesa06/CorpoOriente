@@ -30,9 +30,10 @@ export const useAppointments = () => {
       const { data, error } = await supabase
         .from('rooms')
         .select('id, name, description')
-        .eq('is_active', true);
+        .or('is_active.eq.true,is_active.is.null');
 
       if (error) throw error;
+      console.log('Fetched Rooms:', data);
       setRooms(data || []);
       return data || [];
     } catch (error: any) {
@@ -44,24 +45,27 @@ export const useAppointments = () => {
   const getAvailability = async (doctorId: string, date: string) => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('No autenticado');
+      // Force a session check/refresh to ensure we have a valid token
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session) {
+        console.error('Session error:', sessionError);
+        throw new Error('No autenticado');
+      }
 
       console.log('Fetching availability for:', { doctorId, date });
 
       // Correctly use invoke with query parameters in the function name
       const { data, error } = await supabase.functions.invoke(`appointments?action=availability&doctor_id=${doctorId}&date=${date}`, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
-        }
+        method: 'GET'
       });
 
       if (error) {
         console.error('Invoke error:', error);
-        // Try to interpret the error body if available
+
         let errorMessage = 'Error al obtener disponibilidad';
+        let errorDetails = '';
+
         if (error instanceof Error) {
           errorMessage = error.message;
           // @ts-ignore - Supabase specific error structure might have context
@@ -69,18 +73,34 @@ export const useAppointments = () => {
             try {
               // @ts-ignore
               const body = await error.context.json();
-              if (body && body.error) errorMessage = body.error;
-            } catch (e) { /* ignore */ }
+              console.error('Full Error Body:', body); // Log the full body for debugging
+
+              if (body) {
+                if (body.error) errorMessage = body.error;
+                if (body.details) errorDetails = body.details;
+              }
+            } catch (e) {
+              console.error('Error parsing error body:', e);
+            }
           }
         }
-        throw new Error(errorMessage);
+
+        // Include details in the thrown error if available
+        throw new Error(errorDetails ? `${errorMessage}: ${errorDetails}` : errorMessage);
       }
 
       // If the function returns an error object inside data (some invocation styles)
       if (data && data.error) throw new Error(data.error);
 
-      setSlots(data.slots || []);
-      return data.slots;
+      // Filter slots strictly between 9 AM and 7 PM Local Time
+      const filteredSlots = (data.slots || []).filter((slot: string) => {
+        const date = new Date(slot);
+        const hour = date.getHours(); // Uses browser local time
+        return hour >= 9 && hour < 19;
+      });
+
+      setSlots(filteredSlots);
+      return filteredSlots;
     } catch (error: any) {
       console.error('Error obteniendo disponibilidad:', error);
       toast.error(error.message || 'Error al obtener disponibilidad');
@@ -114,25 +134,32 @@ export const useAppointments = () => {
           is_virtual: isVirtual,
           room_id: roomId || null, // Send null if undefined/empty
           notes
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
         }
       });
 
       if (error) {
-        console.error('Invoke create error:', error);
+        console.error('Invoke create error details:', {
+          message: error.message,
+          name: error.name,
+          // @ts-ignore
+          context: error.context,
+          // @ts-ignore
+          status: error.status
+        });
+
         let errorMessage = 'Error al crear la cita';
         if (error instanceof Error) {
           errorMessage = error.message;
           // @ts-ignore
-          if (error.context && error.context.json) {
+          if (error.context && typeof error.context.json === 'function') {
             try {
               // @ts-ignore
               const body = await error.context.json();
+              console.error('Invoke error body:', body);
               if (body && body.error) errorMessage = body.error;
-            } catch (e) { /* ignore */ }
+            } catch (e) {
+              console.error('Could not parse error body');
+            }
           }
         }
         throw new Error(errorMessage);
@@ -165,10 +192,6 @@ export const useAppointments = () => {
         body: {
           appointment_id: appointmentId,
           reason
-        },
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? ''
         }
       });
 
@@ -193,6 +216,58 @@ export const useAppointments = () => {
     getRooms,
     getAvailability,
     createAppointment,
-    cancelAppointment
+    cancelAppointment,
+    checkRoomAvailability: async (startTime: string, endTime: string): Promise<boolean> => {
+      try {
+        const { data, error } = await supabase.rpc('check_any_available_room' as any, {
+          p_start_time: startTime,
+          p_end_time: endTime
+        });
+
+        if (error) {
+          console.error('Error checking room availability:', error);
+          throw error;
+        }
+        return data as boolean;
+      } catch (error) {
+        console.error('Catch Error checking room availability:', error);
+        return false;
+      }
+    },
+    assignRoomToAppointment: async (appointmentId: string, doctorId: string): Promise<boolean> => {
+      try {
+        const { data, error } = await supabase.rpc('assign_room_to_appointment' as any, {
+          p_appointment_id: appointmentId,
+          p_doctor_id: doctorId
+        });
+
+        if (error) {
+          console.error('RPC Error (assign_room_to_appointment):', error);
+          return false;
+        }
+
+        if (data && !(data as any).success) {
+          console.warn('Backend Assignment Failed:', (data as any).message);
+        }
+
+        return (data as any)?.success || false;
+      } catch (error) {
+        console.error('Catch Error assigning room:', error);
+        return false;
+      }
+    },
+    generatePayout: async (appointmentId: string): Promise<boolean> => {
+      try {
+        const { data, error } = await supabase.rpc('generate_single_payout' as any, {
+          p_appointment_id: appointmentId
+        });
+
+        if (error) throw error;
+        return (data as any)?.success || false;
+      } catch (error) {
+        console.error('Error generating payout:', error);
+        return false;
+      }
+    }
   };
 };

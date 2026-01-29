@@ -242,13 +242,27 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
                 .select()
                 .single();
 
-            if (aptError) throw aptError;
+            // 2. Get Doctor's Fee for the payment
+            const { data: docProfile } = await supabase
+                .from('doctor_profiles')
+                .select('consultation_fee, consultation_fee_virtual')
+                .eq('id', selectedDoctorId)
+                .single();
 
-            // Mark as paid immediately in DB for MVP flow
+            const finalAmount = isVirtual
+                ? (docProfile?.consultation_fee_virtual || docProfile?.consultation_fee || 0)
+                : (docProfile?.consultation_fee || 0);
+
+            // Ensure payment record exists and is marked as paid
             await supabase
                 .from('payments')
-                .update({ status: 'paid', paid_at: new Date().toISOString(), amount: 500 })
-                .eq('appointment_id', apt.id);
+                .upsert({
+                    appointment_id: apt.id,
+                    status: 'paid',
+                    paid_at: new Date().toISOString(),
+                    amount: finalAmount,
+                    currency: 'COP'
+                }, { onConflict: 'appointment_id' });
 
             toast.success("Cita agendada y pagada exitosamente");
 
@@ -268,7 +282,10 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
 
     const getStatusBadge = (status: string) => {
         switch (status) {
-            case 'confirmed': return <Badge className="bg-green-50 text-green-700 border-green-200">Confirmada</Badge>;
+            case 'confirmed':
+            case 'completed':
+            case 'COMPLETED':
+                return <Badge className="bg-green-50 text-green-700 border-green-200">Confirmada</Badge>;
             case 'pending': return <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200">Pendiente</Badge>;
             case 'cancelled': return <Badge variant="destructive">Cancelada</Badge>;
             default: return <Badge variant="outline">{status}</Badge>;
@@ -277,14 +294,14 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
 
     const getPaymentBadge = (payment: any) => {
         const p = payment && payment[0];
-        const amount = p ? p.amount : 500;
+        const amount = p ? p.amount : 0;
 
         return (
             <div className="flex flex-col gap-1">
                 <Badge className="bg-blue-50 text-blue-700 border-blue-200 w-fit">
                     <CheckCircle2 className="h-3 w-3 mr-1" /> Pagado
                 </Badge>
-                <span className="text-[10px] font-bold text-slate-700">${amount.toLocaleString()}</span>
+                <span className="text-[10px] font-bold text-slate-700">{(amount || 0).toLocaleString()} COP</span>
             </div>
         );
     };
@@ -315,10 +332,10 @@ export function AdminAppointmentBooking({ isSuperAdmin = false }: { isSuperAdmin
                             <SelectItem value="virtual">Virtual</SelectItem>
                         </SelectContent>
                     </Select>
-                    <Button variant="outline" size="sm" onClick={fetchAppointments} disabled={fetchingAppointments} className="h-8">
+                    {/* <Button variant="outline" size="sm" onClick={fetchAppointments} disabled={fetchingAppointments} className="h-8">
                         <Loader2 className={cn("h-4 w-4 mr-2", fetchingAppointments && "animate-spin")} />
                         Actualizar
-                    </Button>
+                    </Button> */}
                 </div>
             </div>
 

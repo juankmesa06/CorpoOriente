@@ -81,7 +81,13 @@ export const PatientNameDisplay = ({ patientId, className }: PatientNameDisplayP
         };
     }, [patientId]);
 
-    if (loading) return <span className={`animate-pulse ${className}`}>Cargando...</span>;
+    if (loading) {
+        return (
+            <span className={`inline-block animate-pulse bg-gray-200 h-4 w-24 rounded align-middle ${className}`}>
+                <span className="sr-only">Cargando...</span>
+            </span>
+        );
+    }
 
-    return <span className={className}>{name}</span>;
+    return <span className={`inline-block align-middle ${className}`}>{name}</span>;
 };

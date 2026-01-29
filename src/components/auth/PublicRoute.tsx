@@ -18,7 +18,14 @@ export function PublicRoute({ children }: PublicRouteProps) {
     }
 
     if (user) {
-        return <Navigate to="/dashboard" replace />;
+        // En Supabase, el evento de recuperación de contraseña inicia sesión al usuario.
+        // Solo redirigimos al dashboard si NO es una sesión de recuperación.
+        const isRecovery = window.location.href.includes('type=recovery') ||
+            window.location.hash.includes('type=recovery');
+
+        if (!isRecovery) {
+            return <Navigate to="/dashboard" replace />;
+        }
     }
 
     return <>{children}</>;

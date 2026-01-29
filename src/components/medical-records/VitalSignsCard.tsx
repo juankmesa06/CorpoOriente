@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogT
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { HeartPulse, Thermometer, Activity, Pill, Edit2, Check, X } from "lucide-react";
+import { HeartPulse, Thermometer, Activity, Pill, Edit2, Check, X, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -107,10 +107,10 @@ export const VitalSignsCard = ({ patientId, data, onUpdate }: VitalSignsCardProp
                 </Button>
             </div>
 
-            <div className="bg-gradient-to-r from-secondary/5 to-secondary/10 p-4 border-b border-secondary/10">
-                <h2 className="font-semibold text-secondary flex items-center gap-2">
-                    <HeartPulse className="h-5 w-5 text-primary" />
-                    Datos Vitales
+            <div className="bg-gradient-to-r from-teal-50 to-teal-100/50 p-4 border-b border-teal-100">
+                <h2 className="font-semibold text-teal-800 flex items-center gap-2">
+                    <User className="h-5 w-5 text-teal-600" />
+                    Resumen del Paciente
                 </h2>
             </div>
             <CardContent className="p-0">

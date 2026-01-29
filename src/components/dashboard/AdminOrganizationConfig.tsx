@@ -24,16 +24,16 @@ import { toast } from 'sonner';
 export const AdminOrganizationConfig = () => {
     const [loading, setLoading] = useState(false);
     const [config, setConfig] = useState({
-        name: 'Centro PsicoTerapeutico',
-        description: 'Centro integral de salud mental y bienestar emocional.',
-        address: 'Av. Principal 123, Ciudad',
-        phone: '+57 300 123 4567',
-        email: 'contacto@centropsicoterapeutico.com',
-        website: 'www.centropsicoterapeutico.com',
+        name: 'Centro Psicoterapéutico de Oriente',
+        description: 'Centro integral de salud mental y bienestar emocional. ¡Cuidamos de ti y los tuyos!',
+        address: 'Calle 48 #62b 106, Rionegro, Antioquia',
+        phone: '+57 321 786 10 80',
+        email: 'Hola@cpo.co',
+        website: 'https://centropsicoterapeuticodeoriente.com',
         timezone: 'America/Bogota',
         currency: 'COP',
         brandColor: '#0ea5e9',
-        logoUrl: '' // Mock
+        logoUrl: '/logo.png'
     });
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

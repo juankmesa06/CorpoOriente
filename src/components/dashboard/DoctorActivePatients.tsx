@@ -24,9 +24,10 @@ interface PatientActive {
 
 interface DoctorActivePatientsProps {
     onSelectPatient: (patientId: string) => void;
+    hideHeader?: boolean;
 }
 
-export const DoctorActivePatients = ({ onSelectPatient }: DoctorActivePatientsProps) => {
+export const DoctorActivePatients = ({ onSelectPatient, hideHeader = false }: DoctorActivePatientsProps) => {
     const { user } = useAuth();
     const [patients, setPatients] = useState<PatientActive[]>([]);
     const [loading, setLoading] = useState(true);
@@ -42,12 +43,13 @@ export const DoctorActivePatients = ({ onSelectPatient }: DoctorActivePatientsPr
         if (!user) return;
 
         try {
-            const { data, error } = await supabase.rpc('get_doctor_patients_list');
+            // Cast RPC name to any to avoid type errors with recent functions
+            const { data, error } = await supabase.rpc('get_doctor_patients_list' as any);
 
             if (error) throw error;
 
             if (data) {
-                const mappedPatients = data.map((item: any) => ({
+                const mappedPatients = (data as any[]).map((item: any) => ({
                     id: item.pt_id,
                     name: item.pt_name,
                     email: item.pt_email,
@@ -80,15 +82,17 @@ export const DoctorActivePatients = ({ onSelectPatient }: DoctorActivePatientsPr
     );
 
     return (
-        <div className="space-y-4 mt-8 pt-6 border-t border-gray-100">
-            <div className="flex items-center justify-between">
-                <h3 className="text-secondary font-semibold flex items-center gap-2">
-                    <Users className="h-4 w-4" /> Gestión de Pacientes
-                </h3>
-                <Badge variant="secondary" className="text-xs">
-                    {patients.length} Activos
-                </Badge>
-            </div>
+        <div className="space-y-4 w-full">
+            {!hideHeader && (
+                <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <h3 className="text-secondary font-semibold flex items-center gap-2">
+                        <Users className="h-4 w-4" /> Gestión de Pacientes
+                    </h3>
+                    <Badge variant="secondary" className="text-xs">
+                        {patients.length} Activos
+                    </Badge>
+                </div>
+            )}
 
             <div className="relative">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -154,15 +158,16 @@ export const DoctorActivePatients = ({ onSelectPatient }: DoctorActivePatientsPr
                                                 <FileText className="h-4 w-4" />
                                             </Button>
                                         </Link>
-                                        <Button
-                                            size="icon"
-                                            variant="ghost"
-                                            className="h-8 w-8 text-primary hover:text-primary hover:bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={() => onSelectPatient(patient.id)}
-                                            title="Ver Detalles Rápidos"
-                                        >
-                                            <ArrowRight className="h-4 w-4" />
-                                        </Button>
+                                        <Link to={`/medical-record?id=${patient.id}`} title="Ver Historial Médico Completo">
+                                            <Button
+                                                size="icon"
+                                                variant="ghost"
+                                                className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Ver Historial Médico Completo"
+                                            >
+                                                <ArrowRight className="h-4 w-4" />
+                                            </Button>
+                                        </Link>
                                     </div>
                                 </div>
                             </div>

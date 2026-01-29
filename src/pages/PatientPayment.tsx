@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePayments } from '@/hooks/usePayments';
+import { useAppointments } from '@/hooks/useAppointments';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,17 +15,19 @@ export default function PatientPayment() {
     const { appointmentId } = useParams<{ appointmentId: string }>();
     const navigate = useNavigate();
     const { markAsPaid, loading: processingPayment } = usePayments();
+    const { assignRoomToAppointment, generatePayout } = useAppointments(); // Get new RPCs
 
     const [appointment, setAppointment] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [paymentSuccess, setPaymentSuccess] = useState(false);
+    const [amount, setAmount] = useState<number>(0);
 
     useEffect(() => {
         if (!appointmentId) return;
 
         const fetchAppointment = async () => {
             try {
-                // 1. Fetch basic appointment info + doctor_id
+                // 1. Fetch basic appointment info + doctor_id + fees
                 const { data: apt, error: aptError } = await supabase
                     .from('appointments')
                     .select('id, start_time, doctor_id, is_virtual')
@@ -34,13 +37,17 @@ export default function PatientPayment() {
                 if (aptError) throw aptError;
 
                 let doctorName = 'Doctor';
-                // 2. Fetch Doctor Name if doctor_id exists
+                let consultationFee = 0;
+
+                // 2. Fetch Doctor Name and Fees
                 if (apt.doctor_id) {
-                    const { data: docProfile } = await supabase
+                    const { data: docData } = await supabase
                         .from('doctor_profiles')
-                        .select('user_id')
+                        .select('user_id, consultation_fee, consultation_fee_virtual')
                         .eq('id', apt.doctor_id)
                         .single();
+
+                    const docProfile: any = docData;
 
                     if (docProfile) {
                         const { data: profile } = await supabase
@@ -50,6 +57,13 @@ export default function PatientPayment() {
                             .single();
 
                         if (profile) doctorName = profile.full_name;
+
+                        // Determine price
+                        if (apt.is_virtual) {
+                            consultationFee = docProfile.consultation_fee_virtual || docProfile.consultation_fee || 0;
+                        } else {
+                            consultationFee = docProfile.consultation_fee || 0;
+                        }
                     }
                 }
 
@@ -61,6 +75,8 @@ export default function PatientPayment() {
                         }
                     }
                 });
+                setAmount(consultationFee); // Set calculated amount
+
             } catch (error) {
                 console.error('Error fetching appointment:', error);
                 toast.error('No se pudo cargar la información de la cita');
@@ -73,20 +89,44 @@ export default function PatientPayment() {
     }, [appointmentId]);
 
     const handlePayment = async () => {
-        if (!appointmentId) return;
+        if (!appointmentId || !appointment) return;
 
+        // 1. Mark as Paid (Core)
         const success = await markAsPaid(
             appointmentId,
-            'card', // MOCKED method
-            50.00, // MOCKED amount, could be dynamic based on doctor/service
+            'card',
+            amount,
             'Pago en línea'
         );
 
         if (success) {
-            setPaymentSuccess(true);
+            // 2. Post-Payment Actions (Silent orchestration)
+            try {
+                // A. Assign Room (if physical)
+                if (!appointment.is_virtual) {
+                    if (assignRoomToAppointment) {
+                        const roomAssigned = await assignRoomToAppointment(appointmentId, appointment.doctor_id);
+                        if (!roomAssigned) console.warn('Could not assign room immediately. Monitor this.');
+                    }
+                }
+
+                // B. Generate Payout (Wallet Update)
+                if (generatePayout) {
+                    await generatePayout(appointmentId);
+                }
+
+            } catch (postError) {
+                console.error('Error in post-payment processing:', postError);
+                // Don't fail the user flow, just log. Admin can fix.
+            }
+
+            // Delay state change to avoid React removeChild race condition with Button state
             setTimeout(() => {
-                navigate('/dashboard');
-            }, 3000);
+                setPaymentSuccess(true);
+                setTimeout(() => {
+                    navigate('/dashboard');
+                }, 3000);
+            }, 100);
         }
     };
 
@@ -101,7 +141,7 @@ export default function PatientPayment() {
     if (!appointment) {
         return (
             <div className="flex h-screen items-center justify-center">
-                <p className="text-muted-foreground">Cita no encontrada.</p>
+                <p className="text-muted-foreground"><span>Cita no encontrada.</span></p>
             </div>
         );
     }
@@ -140,32 +180,34 @@ export default function PatientPayment() {
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Fecha:</span>
                             <span className="font-medium">
-                                {format(new Date(appointment.start_time), "dd 'de' MMMM, yyyy", { locale: es })}
+                                <span>{format(new Date(appointment.start_time), "dd 'de' MMMM, yyyy", { locale: es })}</span>
                             </span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Hora:</span>
                             <span className="font-medium">
-                                {format(new Date(appointment.start_time), "HH:mm a")}
+                                <span>{format(new Date(appointment.start_time), "h:mm a")}</span>
                             </span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Doctor:</span>
                             <span className="font-medium">
-                                {appointment.doctor_profiles?.profiles?.full_name || 'Doctor'}
+                                <span>{appointment.doctor_profiles?.profiles?.full_name || 'Doctor'}</span>
                             </span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Modalidad:</span>
                             <span className="font-medium">
-                                {appointment.is_virtual ? 'Virtual' : 'Presencial'}
+                                <span>{appointment.is_virtual ? 'Virtual' : 'Presencial'}</span>
                             </span>
                         </div>
 
                         <div className="border-t pt-3 mt-3">
                             <div className="flex justify-between items-center">
                                 <span className="font-bold text-lg">Total a pagar:</span>
-                                <span className="font-bold text-xl text-primary">$50.00 USD</span>
+                                <span className="font-bold text-xl text-primary">
+                                    <span>${amount.toLocaleString()} COP</span>
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -184,7 +226,7 @@ export default function PatientPayment() {
                         {processingPayment ? 'Procesando...' : 'Pagar Ahora'}
                     </Button>
                 </CardFooter>
-            </Card>
-        </div>
+            </Card >
+        </div >
     );
 }

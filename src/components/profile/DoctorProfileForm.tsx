@@ -21,7 +21,10 @@ export const DoctorProfileForm = () => {
         consultation_duration_min: 60,
         consultation_fee: 0,
         education: '',
-        photo_url: ''
+        photo_url: '',
+        bank_name: '',
+        account_number: '',
+        account_type: 'Ahorros'
     });
 
     useEffect(() => {
@@ -49,7 +52,10 @@ export const DoctorProfileForm = () => {
                         consultation_duration_min: data.consultation_duration_min || 60,
                         consultation_fee: data.consultation_fee || 0,
                         education: data.education || '',
-                        photo_url: data.photo_url || ''
+                        photo_url: data.photo_url || '',
+                        bank_name: data.bank_name || '',
+                        account_number: data.account_number || '',
+                        account_type: data.account_type || 'Ahorros'
                     });
                 }
             } catch (err: any) {
@@ -120,6 +126,9 @@ export const DoctorProfileForm = () => {
                     consultation_fee: formData.consultation_fee,
                     education: formData.education,
                     photo_url: formData.photo_url,
+                    bank_name: formData.bank_name,
+                    account_number: formData.account_number,
+                    account_type: formData.account_type,
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'user_id' });
 
@@ -254,9 +263,13 @@ export const DoctorProfileForm = () => {
                             <Input
                                 id="duration"
                                 type="number"
-                                value={formData.consultation_duration_min}
-                                onChange={(e) => setFormData({ ...formData, consultation_duration_min: parseInt(e.target.value) })}
+                                value={60}
+                                disabled
+                                className="bg-slate-50 cursor-not-allowed opacity-70"
                             />
+                            <p className="text-[10px] text-muted-foreground font-medium">
+                                Duración fija de 1 hora por política de reserva de consultorios.
+                            </p>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="fee">Valor Consulta (COP)</Label>
@@ -270,6 +283,46 @@ export const DoctorProfileForm = () => {
                             <p className="text-xs text-muted-foreground">
                                 Costo por sesión para pacientes particulares.
                             </p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4 border-t pt-6">
+                        <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">Información para Pagos (Lunes)</h3>
+                        <p className="text-xs text-muted-foreground mb-4">
+                            Ingresa tus datos bancarios para que la administración pueda transferir tus honorarios semanalmente.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="bank_name">Banco</Label>
+                                <Input
+                                    id="bank_name"
+                                    placeholder="Ej: Bancolombia, Davivienda"
+                                    value={formData.bank_name}
+                                    onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="account_type">Tipo de Cuenta</Label>
+                                <select
+                                    id="account_type"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    value={formData.account_type}
+                                    onChange={(e) => setFormData({ ...formData, account_type: e.target.value })}
+                                >
+                                    <option value="Ahorros">Ahorros</option>
+                                    <option value="Corriente">Corriente</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="account_number">Número de Cuenta</Label>
+                                <Input
+                                    id="account_number"
+                                    placeholder="000-000000-00"
+                                    value={formData.account_number}
+                                    onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
+                                />
+                            </div>
                         </div>
                     </div>
 

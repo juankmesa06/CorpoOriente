@@ -6,9 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Users, UserCheck, UserX, TrendingUp, Trash2, Search, Stethoscope, Mail, Award, Calendar } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Users, UserCheck, UserX, TrendingUp, Trash2, Search, Stethoscope, Mail, Award, Calendar, UserPlus, Phone, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { CreateDoctorForm } from './CreateDoctorForm';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -26,10 +28,12 @@ interface Doctor {
     is_affiliated: boolean;
     bio: string | null;
     license_number: string | null;
+    consultation_fee: number | null;
     created_at: string;
     profile?: {
         full_name: string;
         email: string;
+        phone: string | null;
     };
 }
 
@@ -48,6 +52,7 @@ export const DoctorAffiliationManager = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [stats, setStats] = useState<Stats>({ total: 0, affiliated: 0, notAffiliated: 0, affiliationRate: 0 });
     const [doctorToDelete, setDoctorToDelete] = useState<string | null>(null);
+    const [createDialogOpen, setCreateDialogOpen] = useState(false);
     const { roles } = useAuth();
 
     // Check if current user is super admin
@@ -73,6 +78,7 @@ export const DoctorAffiliationManager = () => {
                 is_affiliated,
                 bio,
                 license_number,
+                consultation_fee,
                 created_at
             `)
             .order('created_at', { ascending: false });
@@ -87,7 +93,7 @@ export const DoctorAffiliationManager = () => {
         const userIds = doctorProfiles?.map(d => d.user_id) || [];
         const { data: profiles } = await supabase
             .from('profiles')
-            .select('user_id, full_name, email')
+            .select('user_id, full_name, email, phone')
             .in('user_id', userIds);
 
         // Combinar datos
@@ -198,10 +204,10 @@ export const DoctorAffiliationManager = () => {
             {/* Header */}
             <div>
                 <h3 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                    Gestión de Médicos
+                    Gestión de médicos
                 </h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                    Administra qué médicos están afiliados a la corporación
+                    Administración completa de médicos - Información técnica y profesional
                 </p>
             </div>
 
@@ -213,7 +219,7 @@ export const DoctorAffiliationManager = () => {
                             <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center">
                                 <Users className="h-5 w-5 text-slate-600" />
                             </div>
-                            <p className="text-sm font-medium text-slate-500">Total Médicos</p>
+                            <p className="text-sm font-medium text-slate-500">Total médicos</p>
                         </div>
                         <p className="text-3xl font-bold text-slate-900">{stats.total}</p>
                     </CardContent>
@@ -237,7 +243,7 @@ export const DoctorAffiliationManager = () => {
                             <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
                                 <UserX className="h-5 w-5 text-orange-600" />
                             </div>
-                            <p className="text-sm font-medium text-orange-700">No Afiliados</p>
+                            <p className="text-sm font-medium text-orange-700">No afiliados</p>
                         </div>
                         <p className="text-3xl font-bold text-orange-600">{stats.notAffiliated}</p>
                     </CardContent>
@@ -249,7 +255,7 @@ export const DoctorAffiliationManager = () => {
                             <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
                                 <TrendingUp className="h-5 w-5 text-blue-600" />
                             </div>
-                            <p className="text-sm font-medium text-blue-700">Tasa Afiliación</p>
+                            <p className="text-sm font-medium text-blue-700">Tasa afiliación</p>
                         </div>
                         <p className="text-3xl font-bold text-blue-600">{stats.affiliationRate}%</p>
                     </CardContent>
@@ -279,6 +285,13 @@ export const DoctorAffiliationManager = () => {
                                 <SelectItem value="not_affiliated">Solo no afiliados</SelectItem>
                             </SelectContent>
                         </Select>
+                        <Button
+                            onClick={() => setCreateDialogOpen(true)}
+                            className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white"
+                        >
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Crear médico
+                        </Button>
                     </div>
                 </CardContent>
             </Card>
@@ -308,20 +321,20 @@ export const DoctorAffiliationManager = () => {
                             {filteredDoctors.map((doctor) => (
                                 <div
                                     key={doctor.user_id}
-                                    className="flex items-center justify-between p-6 hover:bg-slate-50/50 transition-colors group"
+                                    className="p-6 hover:bg-slate-50/50 transition-colors group"
                                 >
-                                    <div className="flex items-center gap-4 flex-1">
+                                    <div className="flex items-start gap-4">
                                         {/* Avatar */}
-                                        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+                                        <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-md flex-shrink-0">
                                             {getInitials(doctor.profile?.full_name || 'Dr')}
                                         </div>
 
-                                        {/* Info */}
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <p className="font-semibold text-lg text-slate-900">
+                                        {/* Info Completa */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <h3 className="text-xl font-bold text-slate-900">
                                                     {doctor.profile?.full_name || 'Sin nombre'}
-                                                </p>
+                                                </h3>
                                                 <Badge
                                                     variant={doctor.is_affiliated ? 'default' : 'secondary'}
                                                     className={doctor.is_affiliated
@@ -336,63 +349,112 @@ export const DoctorAffiliationManager = () => {
                                                     ) : (
                                                         <>
                                                             <UserX className="h-3 w-3 mr-1" />
-                                                            No Afiliado
+                                                            No afiliado
                                                         </>
                                                     )}
                                                 </Badge>
                                             </div>
 
-                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                                                <div className="flex items-center gap-1">
-                                                    <Stethoscope className="h-3 w-3" />
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm text-muted-foreground">
+                                                <div className="flex items-center gap-2">
+                                                    <Mail className="h-4 w-4 text-slate-500" />
+                                                    <span>{doctor.profile?.email || 'Sin email'}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Stethoscope className="h-4 w-4 text-slate-500" />
                                                     <span>{doctor.specialty}</span>
                                                 </div>
-                                                <div className="flex items-center gap-1">
-                                                    <Mail className="h-3 w-3" />
-                                                    <span>{doctor.profile?.email}</span>
-                                                </div>
                                                 {doctor.license_number && (
-                                                    <div className="flex items-center gap-1">
-                                                        <Award className="h-3 w-3" />
+                                                    <div className="flex items-center gap-2">
+                                                        <Award className="h-4 w-4 text-slate-500" />
                                                         <span>Lic. {doctor.license_number}</span>
                                                     </div>
                                                 )}
-                                                <div className="flex items-center gap-1">
-                                                    <Calendar className="h-3 w-3" />
+                                                {doctor.profile?.phone && (
+                                                    <div className="flex items-center gap-2">
+                                                        <Phone className="h-4 w-4 text-slate-500" />
+                                                        <span>{doctor.profile.phone}</span>
+                                                    </div>
+                                                )}
+                                                {doctor.consultation_fee && (
+                                                    <div className="flex items-center gap-2">
+                                                        <DollarSign className="h-4 w-4 text-slate-500" />
+                                                        <span>${doctor.consultation_fee.toLocaleString('es-CO')} COP</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex items-center gap-2">
+                                                    <Calendar className="h-4 w-4 text-slate-500" />
                                                     <span>Registrado: {formatDate(doctor.created_at)}</span>
                                                 </div>
                                             </div>
-                                        </div>
-                                    </div>
 
-                                    {/* Actions */}
-                                    <div className="flex items-center gap-4">
-                                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
-                                            <span className="text-sm font-medium text-slate-700">
-                                                {doctor.is_affiliated ? 'Desafiliar' : 'Afiliar'}
-                                            </span>
-                                            <Switch
-                                                checked={doctor.is_affiliated}
-                                                onCheckedChange={() => toggleAffiliation(doctor.user_id, doctor.is_affiliated)}
-                                            />
+                                            {doctor.bio && (
+                                                <p className="text-sm text-slate-600 mt-3 line-clamp-2">
+                                                    {doctor.bio}
+                                                </p>
+                                            )}
                                         </div>
 
-                                        {/* Delete button - only for super admin */}
-                                        {isSuperAdmin && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 h-9 w-9 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                onClick={() => setDoctorToDelete(doctor.user_id)}
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        )}
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-3 flex-shrink-0">
+                                            <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-lg border border-slate-200">
+                                                <span className="text-sm font-medium text-slate-700">
+                                                    {doctor.is_affiliated ? 'Desafiliar' : 'Afiliar'}
+                                                </span>
+                                                <Switch
+                                                    checked={doctor.is_affiliated}
+                                                    onCheckedChange={() => toggleAffiliation(doctor.user_id, doctor.is_affiliated)}
+                                                />
+                                            </div>
+
+                                            {/* Delete button - only for super admin */}
+                                            {isSuperAdmin && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-red-500 hover:text-red-700 hover:bg-red-50 h-9 w-9 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    onClick={() => setDoctorToDelete(doctor.user_id)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     )}
+                </CardContent>
+            </Card>
+
+            {/* Información adicional */}
+            <Card className="bg-blue-50 border-blue-200">
+                <CardContent className="pt-6">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2 text-blue-900">
+                        <Users className="h-4 w-4" />
+                        Sobre las afiliaciones
+                    </h4>
+                    <ul className="text-sm text-blue-800 space-y-2">
+                        <li className="flex items-start gap-2">
+                            <UserCheck className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                            <span><strong>Médicos afiliados:</strong> Aparecen en la lista de doctores para citas, pueden gestionar pacientes y alquilar espacios</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                            <UserX className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                            <span><strong>Médicos no afiliados:</strong> Solo pueden alquilar espacios, no aparecen en la lista de doctores</span>
+                        </li>
+                        <li className="flex items-start gap-2">
+                            <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                            <span>Los pacientes solo ven médicos afiliados al agendar citas</span>
+                        </li>
+                        {!isSuperAdmin && (
+                            <li className="flex items-start gap-2 mt-3 pt-3 border-t border-blue-300">
+                                <span className="text-xs text-blue-700">
+                                    ℹ️ <strong>Nota:</strong> Solo el Super Admin puede eliminar médicos del sistema
+                                </span>
+                            </li>
+                        )}
+                    </ul>
                 </CardContent>
             </Card>
 
@@ -419,42 +481,33 @@ export const DoctorAffiliationManager = () => {
                             onClick={handleDeleteDoctor}
                             className="bg-red-600 hover:bg-red-700"
                         >
-                            Eliminar Definitivamente
+                            Eliminar definitivamente
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Información adicional */}
-            <Card className="bg-blue-50 border-blue-200">
-                <CardContent className="pt-6">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2 text-blue-900">
-                        <Users className="h-4 w-4" />
-                        Sobre las afiliaciones
-                    </h4>
-                    <ul className="text-sm text-blue-800 space-y-2">
-                        <li className="flex items-start gap-2">
-                            <UserCheck className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                            <span><strong>Médicos Afiliados:</strong> Aparecen en la lista de doctores para citas, pueden gestionar pacientes y alquilar espacios</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                            <UserX className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                            <span><strong>Médicos No Afiliados:</strong> Solo pueden alquilar espacios, no aparecen en la lista de doctores</span>
-                        </li>
-                        <li className="flex items-start gap-2">
-                            <TrendingUp className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                            <span>Los pacientes solo ven médicos afiliados al agendar citas</span>
-                        </li>
-                        {!isSuperAdmin && (
-                            <li className="flex items-start gap-2 mt-3 pt-3 border-t border-blue-300">
-                                <span className="text-xs text-blue-700">
-                                    ℹ️ <strong>Nota:</strong> Solo el Super Admin puede eliminar médicos del sistema
-                                </span>
-                            </li>
-                        )}
-                    </ul>
-                </CardContent>
-            </Card>
+            {/* Create Doctor Dialog */}
+            <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl flex items-center gap-2">
+                            <UserPlus className="h-6 w-6 text-teal-600" />
+                            Crear nuevo médico
+                        </DialogTitle>
+                        <DialogDescription>
+                            Ingrese la información del nuevo médico. Se enviará un correo para configurar su contraseña.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <CreateDoctorForm
+                        onSuccess={() => {
+                            setCreateDialogOpen(false);
+                            loadDoctors();
+                            toast.success('Médico creado y lista actualizada');
+                        }}
+                    />
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

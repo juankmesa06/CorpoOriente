@@ -1,0 +1,121 @@
+/* Custom Calendar Styling */
+.fc {
+    font-family: inherit;
+}
+
+.fc-theme-standard th {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+    font-weight: 600;
+    color: #475569;
+}
+
+.fc-theme-standard td {
+    border-color: #e2e8f0;
+}
+
+.fc-col-header-cell {
+    padding: 8px 4px;
+}
+
+.fc-timeline-slot {
+    border-left: 1px solid #e2e8f0 !important;
+}
+
+.fc-timeline-slot-cushion {
+    padding: 4px;
+}
+
+.fc-resource-timeline-divider {
+    background: #cbd5e1;
+    width: 2px;
+}
+
+.fc-datagrid-cell {
+    padding: 12px 8px;
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.fc-event {
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.fc-event:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.fc-event-title {
+    font-weight: 600;
+}
+
+.fc-timegrid-now-indicator-line {
+    border-color: #ef4444;
+    border-width: 2px;
+}
+
+.fc-timegrid-now-indicator-arrow {
+    border-color: #ef4444;
+}
+
+.fc-button {
+    background: #0d9488 !important;
+    border-color: #0d9488 !important;
+    text-transform: capitalize !important;
+    font-weight: 500 !important;
+    padding: 8px 16px !important;
+}
+
+.fc-button:hover {
+    background: #0f766e !important;
+    border-color: #0f766e !important;
+}
+
+.fc-button-active {
+    background: #115e59 !important;
+    border-color: #115e59 !important;
+}
+
+.fc-toolbar-title {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: #1e293b;
+}
+
+/* Resource labels */
+.fc-datagrid-cell-main {
+    font-weight: 600;
+    color: #0f766e;
+}
+
+/* Current time indicator */
+.fc-timeline-now-indicator-line {
+    border-color: #ef4444;
+    border-width: 2px;
+}
+
+/* Better scrollbar */
+.fc-scroller::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.fc-scroller::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+.fc-scroller::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.fc-scroller::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}

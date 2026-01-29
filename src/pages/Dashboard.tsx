@@ -2,6 +2,7 @@ import { Navbar } from '@/components/Navbar';
 import { useAuth } from '@/hooks/useAuth';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { ProfileSetupModal } from '@/components/dashboard/ProfileSetupModal';
 
 // Import split dashboard components
 import PatientDashboard from '@/components/dashboard/PatientDashboard';
@@ -71,17 +72,10 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
+      <ProfileSetupModal />
 
       {/* Main Content Area */}
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold mb-2 tracking-tight">¡Bienvenido, {roles.includes('super_admin') ? 'Super Admin' : (roles.includes('admin') ? 'Administrador' : (userName || user?.email?.split('@')[0]))}!</h2>
-          <p className="text-muted-foreground text-lg">
-            {hasRole('patient') && !hasRole('doctor') && !hasRole('admin')
-              ? "Gestiona tus citas y bienestar emocional."
-              : "Panel de control del sistema de gestión psicoterapéutica."}
-          </p>
-        </div>
+      <main className="container mx-auto px-4 py-4 max-w-7xl">
 
         {/* Dynamic Content based on Role */}
         {(hasRole('admin') || hasRole('super_admin')) ? (
