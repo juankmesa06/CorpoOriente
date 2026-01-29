@@ -14,6 +14,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import PatientPayment from "./pages/PatientPayment";
 import ResetPassword from "./pages/ResetPassword";
+import RentalSpaces from "./pages/RentalSpaces";
 import { Footer } from "@/components/Footer";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -80,6 +81,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <Settings />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/spaces"
+        element={
+          <ProtectedRoute>
+            <RentalSpaces />
           </ProtectedRoute>
         }
       />

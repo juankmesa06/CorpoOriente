@@ -2,7 +2,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Stethoscope, LogOut, UserCircle, Settings, Calendar, Heart, LayoutDashboard, Menu } from 'lucide-react';
+import { Stethoscope, LogOut, UserCircle, Settings, Calendar, Heart, LayoutDashboard, Menu, Building2 } from 'lucide-react';
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -108,6 +108,12 @@ export const Navbar = () => {
                                     icon={Calendar}
                                     label={hasRole('doctor') ? "Mi Agenda" : "Mis Citas"}
                                 />
+                                <NavLink
+                                    to="/appointments"
+                                    icon={Calendar}
+                                    label={hasRole('doctor') ? "Mi Agenda" : "Mis Citas"}
+                                />
+                                <NavLink to="/spaces" icon={Building2} label="Espacios" />
                                 <NavLink to="/settings" icon={Settings} label="Mi Cuenta" />
                             </>
                         )}
@@ -190,6 +196,10 @@ export const Navbar = () => {
                                                 <span className="font-medium text-slate-700">
                                                     {hasRole('patient') ? 'Mis Citas' : hasRole('doctor') ? 'Mi Agenda' : 'Citas'}
                                                 </span>
+                                            </Link>
+                                            <Link to="/spaces" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-50">
+                                                <Building2 className="h-5 w-5 text-slate-500" />
+                                                <span className="font-medium text-slate-700">Espacios</span>
                                             </Link>
                                             <Link to="/settings" className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-50">
                                                 <Settings className="h-5 w-5 text-slate-500" />
