@@ -13,7 +13,9 @@ import {
     TrendingUp,
     DollarSign,
     ChevronRight,
-    KeyRound
+    KeyRound,
+    Menu,
+    X
 } from 'lucide-react';
 import { RoomManagement } from './RoomManagement';
 import { DoctorAffiliationManager } from './DoctorAffiliationManager';
@@ -32,6 +34,7 @@ type Section = 'spaces' | 'appointments' | 'payments' | 'doctor-billing' | 'user
 const AdminDashboard = () => {
     const [activeSection, setActiveSection] = useState<Section>('spaces');
     const [isSettingsOpen, setIsSettingsOpen] = useState(true);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isSuperAdmin, setIsSuperAdmin] = useState(false);
     const [userName, setUserName] = useState('Administrador');
     const [stats, setStats] = useState({ rooms: 0, doctors: 0, patients: 0, availableRooms: 0, revenue: 0 });
@@ -230,14 +233,35 @@ const AdminDashboard = () => {
             </div>
 
             <div className="flex flex-col lg:flex-row gap-6">
+                {/* Mobile Menu Toggle */}
+                <div className="lg:hidden mb-4">
+                    <Button
+                        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                        className="w-full flex items-center justify-between bg-slate-800 text-white"
+                    >
+                        <span className="flex items-center gap-2">
+                            <Menu className="h-5 w-5" />
+                            Menú de Administración
+                        </span>
+                        {isMobileMenuOpen ? <ChevronRight className="rotate-90 transition-transform" /> : <ChevronRight className="transition-transform" />}
+                    </Button>
+                </div>
                 {/* Sidebar */}
-                <aside className="w-full lg:w-72 shrink-0">
+                <aside className={`
+                    w-full lg:w-72 shrink-0 transition-all duration-300
+                    ${isMobileMenuOpen ? 'block' : 'hidden lg:block'}
+                `}>
                     <Card className="border-0 shadow-xl sticky top-24">
-                        <CardHeader className="border-b bg-slate-50">
-                            <CardTitle className="text-lg">Administración</CardTitle>
-                            <CardDescription>
-                                {isSuperAdmin ? 'Acceso completo al sistema' : 'Panel de control'}
-                            </CardDescription>
+                        <CardHeader className="border-b bg-slate-50 flex flex-row items-center justify-between pb-4">
+                            <div>
+                                <CardTitle className="text-lg">Administración</CardTitle>
+                                <CardDescription>
+                                    {isSuperAdmin ? 'Acceso completo al sistema' : 'Panel de control'}
+                                </CardDescription>
+                            </div>
+                            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+                                <X className="h-5 w-5" />
+                            </Button>
                         </CardHeader>
                         <CardContent className="p-4">
                             <nav className="space-y-2">
@@ -245,8 +269,6 @@ const AdminDashboard = () => {
                                 <NavItem section="payments" label="Gestión de cobros" icon={Banknote} />
                                 <NavItem section="doctor-billing" label="Gestión de médicos" icon={Stethoscope} />
                                 <NavItem section="users" label="Gestión de pacientes" icon={Users} />
-
-
 
                                 {isSuperAdmin && (
                                     <NavItem section="user-management" label="Crear usuarios admin" icon={Users} />

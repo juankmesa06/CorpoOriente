@@ -23,6 +23,8 @@ const queryClient = new QueryClient();
 
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PublicRoute } from "@/components/auth/PublicRoute";
+import ScrollToTop from "@/components/ScrollToTop";
+import { SessionTimeout } from "@/components/auth/SessionTimeout";
 
 const AppRoutes = () => {
   const navigate = useNavigate();
@@ -109,6 +111,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
+          <ScrollToTop />
+          <SessionTimeout />
           <div className="flex flex-col min-h-screen">
             <div className="flex-1">
               <AppRoutes />

@@ -57,6 +57,22 @@ export default function Auth() {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
 
+  // Check for errors in URL (e.g. from email confirmation)
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('error=')) {
+      const params = new URLSearchParams(hash.substring(1)); // Remove the #
+      const errorDescription = params.get('error_description');
+      const error = params.get('error');
+
+      if (errorDescription) {
+        toast.error(errorDescription.replace(/\+/g, ' '));
+      } else if (error) {
+        toast.error(`Error: ${error}`);
+      }
+    }
+  }, []);
+
   // Redirigir si ya está autenticado
   useEffect(() => {
     if (user && !loading && !showSuccessDialog) {
@@ -153,6 +169,11 @@ export default function Auth() {
     setResetEmail('');
   };
 
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -162,7 +183,7 @@ export default function Auth() {
   }
 
   return (
-    <div className="flex flex-col bg-slate-50">
+    <div className="flex flex-col min-h-screen bg-slate-50">
       <PublicNavbar />
 
       <main className="flex-grow flex items-center justify-center p-4 pt-24 pb-12 relative overflow-hidden">
