@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { DollarSign, TrendingUp, CreditCard, Wallet, CalendarDays, ArrowUpRight, ArrowDownRight, FileText } from 'lucide-react';
+import { DollarSign, TrendingUp, CreditCard, Wallet, CalendarDays, ArrowUpRight, ArrowDownRight, FileText, AlertCircle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Mock Data - Monthly
 const monthlyData = [
@@ -27,33 +29,52 @@ const transactions = [
     { id: 'TRX-9821', date: '2024-05-20', concept: 'Consulta General - Dr. Pérez', type: 'income', amount: 150.00, status: 'completed' },
     { id: 'TRX-9822', date: '2024-05-20', concept: 'Alquiler Consultorio 3', type: 'income', amount: 300.00, status: 'completed' },
     { id: 'TRX-9823', date: '2024-05-19', concept: 'Terapia de Pareja', type: 'income', amount: 200.00, status: 'pending' },
-    { id: 'TRX-9824', date: '2024-05-18', concept: 'Consulta Valoración', type: 'income', amount: 80.00, status: 'completed' },
-    { id: 'TRX-9825', date: '2024-05-17', concept: 'Mantenimiento Aire Acond.', type: 'expense', amount: 450.00, status: 'completed' },
 ];
 
 export const AdminAccountingReports = () => {
     const [view, setView] = useState("monthly");
+    const [totalRevenue, setTotalRevenue] = useState(0);
+
+    useEffect(() => {
+        const fetchRevenue = async () => {
+            const { data } = await supabase
+                .from('payments')
+                .select('amount')
+                .eq('status', 'paid');
+
+            const total = data?.reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
+            setTotalRevenue(total);
+        };
+        fetchRevenue();
+    }, []);
 
     const formatCurrency = (value: number) =>
         new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(value);
 
     return (
         <div className="space-y-6">
+            <Alert className="bg-blue-50 border-blue-200">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertTitle className="text-blue-800">Modo de Demostración</AlertTitle>
+                <AlertDescription className="text-blue-700">
+                    Los gráficos y transacciones de abajo son ejemplos visuales. La tarjeta de <strong>Ingresos Totales (Pagados)</strong> sí muestra el dato real de la base de datos (Suma de pagos con estado <em>Paid</em>).
+                </AlertDescription>
+            </Alert>
+
             {/* KPI Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Card 1: Total */}
                 <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all">
                     <CardContent className="p-6">
                         <div className="flex items-center justify-between space-y-0 pb-2">
-                            <p className="text-sm font-medium text-slate-500">Ingresos Totales (Mes)</p>
+                            <p className="text-sm font-medium text-slate-500">Ingresos Totales (Pagados)</p>
                             <div className="bg-green-100 p-2 rounded-full">
                                 <DollarSign className="h-4 w-4 text-green-700" />
                             </div>
                         </div>
-                        <div className="text-2xl font-bold text-slate-900">$12,345.00</div>
+                        <div className="text-2xl font-bold text-slate-900">{formatCurrency(totalRevenue)}</div>
                         <div className="flex items-center gap-1 mt-1">
-                            <ArrowUpRight className="h-3 w-3 text-green-600" />
-                            <p className="text-xs text-green-600 font-medium">+15% vs mes anterior</p>
+                            <span className="text-xs text-slate-500">Acumulado total histórico</span>
                         </div>
                     </CardContent>
                 </Card>

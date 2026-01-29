@@ -4,15 +4,20 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, subDays, isWithinInterval, parseISO } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { format, startOfMonth, endOfMonth, startOfDay, endOfDay, subDays, isWithinInterval, parseISO, startOfWeek, endOfWeek, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
     DollarSign, CheckCircle2, Clock, AlertCircle, TrendingUp, TrendingDown,
     CreditCard, Building2, MoreHorizontal, Trash2, Ban, Calendar,
-    Wallet, PieChart, BarChart3, ArrowUpRight, ArrowDownRight
+    Wallet, PieChart, BarChart3, ArrowUpRight, ArrowDownRight, Stethoscope,
+    FileText, Edit2, Settings, History, ChevronRight, Download
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -47,74 +52,313 @@ interface RentalPayment {
     renter_name?: string;
     rooms?: {
         name: string;
+        room_type: string;
     }
 }
 
 const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'];
 
+interface DoctorPayout {
+    doctor_id: string;
+    doctor_name: string;
+    total_appointments: number;
+    appointment_revenue: number;
+    rental_costs: number;
+    net_payout: number;
+}
+
 export const AdminPaymentManager = () => {
+    const { roles } = useAuth();
     const [payments, setPayments] = useState<Payment[]>([]);
     const [rentals, setRentals] = useState<RentalPayment[]>([]);
+    const [doctorPayouts, setDoctorPayouts] = useState<DoctorPayout[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("overview");
+    const [commissionRate, setCommissionRate] = useState(10);
+    const [editingCommission, setEditingCommission] = useState(false);
+    const [tempCommissionRate, setTempCommissionRate] = useState(10);
+
+    // Weekly Payouts State
+    const [selectedWeek, setSelectedWeek] = useState(new Date());
+    const [weeklyPayouts, setWeeklyPayouts] = useState<any[]>([]);
+    const [generatingPayouts, setGeneratingPayouts] = useState(false);
+    const [doctorNames, setDoctorNames] = useState<Record<string, string>>({});
+    const [showGenerateConfirm, setShowGenerateConfirm] = useState(false);
+    const [showPayAllConfirm, setShowPayAllConfirm] = useState(false);
+    const [viewingPayoutDetail, setViewingPayoutDetail] = useState<any>(null);
+    const [doctorProfiles, setDoctorProfiles] = useState<Record<string, any>>({});
+    const [viewingHistory, setViewingHistory] = useState(false);
+
+    const isSuperAdmin = roles.includes('super_admin');
 
     useEffect(() => {
         fetchData();
-    }, []);
+    }, [selectedWeek]);
 
     const fetchData = async () => {
         try {
             setLoading(true);
-            await Promise.all([fetchPayments(), fetchRentals()]);
+            await fetchDoctorNames();
+            await fetchWeeklyPayouts();
+            await Promise.all([
+                fetchPayments().catch(e => console.error('Payments fetch error:', e)),
+                fetchRentals().catch(e => console.error('Rentals fetch error:', e)),
+                fetchDoctorPayouts().catch(e => console.error('Payouts fetch error:', e))
+            ]);
         } catch (error) {
-            console.error('Error fetching data:', error);
-            toast.error('Error al cargar información financiera');
+            console.error('Data fetch error:', error);
         } finally {
             setLoading(false);
         }
     };
 
+    const fetchDoctorNames = async () => {
+        try {
+            const { data: drs, error: e1 } = await supabase.from('doctor_profiles').select('*');
+            if (e1) throw e1;
+            const { data: profs, error: e2 } = await supabase.from('profiles').select('user_id, full_name');
+            if (e2) throw e2;
+            const map: Record<string, string> = {};
+            const profsData: Record<string, any> = {};
+            const profNames: Record<string, string> = {};
+            profs?.forEach(p => profNames[p.user_id] = p.full_name);
+            drs?.forEach(d => {
+                map[d.id] = profNames[d.user_id] || 'Especialista';
+                profsData[d.id] = d;
+            });
+            setDoctorNames(map);
+            setDoctorProfiles(profsData);
+        } catch (e: any) {
+            console.error('fetchDoctorNames failed:', e);
+        }
+    };
+
+    const fetchWeeklyPayouts = async () => {
+        try {
+            const start = startOfWeek(selectedWeek, { weekStartsOn: 1 });
+            const { data, error } = await supabase
+                .from('payouts')
+                .select('*')
+                .eq('week_start_date', format(start, 'yyyy-MM-dd'));
+
+            if (error) {
+                console.error('Weekly payouts fetch error:', JSON.stringify(error));
+                throw error;
+            }
+            setWeeklyPayouts(data || []);
+        } catch (e: any) {
+            console.error('fetchWeeklyPayouts failed:', e);
+        }
+    };
+
+    const handleGeneratePayouts = async () => {
+        setGeneratingPayouts(true);
+        try {
+            const start = startOfWeek(selectedWeek, { weekStartsOn: 1 });
+            const { error } = await supabase.rpc('calculate_weekly_payouts', {
+                _week_start_date: format(start, 'yyyy-MM-dd')
+            });
+
+            if (error) throw error;
+            toast.success('Corte semanal generado exitosamente');
+            setShowGenerateConfirm(false);
+            fetchWeeklyPayouts();
+        } catch (error) {
+            console.error('Error generating payouts:', error);
+            toast.error('Error al generar el corte');
+        } finally {
+            setGeneratingPayouts(false);
+        }
+    };
+
+    const handleProcessPayout = async (payoutIds: string[]) => {
+        try {
+            const { error } = await supabase.rpc('mark_payouts_processed', {
+                _payout_ids: payoutIds
+            });
+
+            if (error) throw error;
+            toast.success('Pagos marcados como procesados');
+            fetchWeeklyPayouts();
+        } catch (error) {
+            console.error('Error processing payouts:', error);
+            toast.error('Error al procesar los pagos');
+        }
+    };
+
+    const handleProcessAllPayouts = async () => {
+        const pendingIds = weeklyPayouts.filter(p => p.status === 'pending').map(p => p.id);
+        if (pendingIds.length === 0) return;
+        try {
+            await handleProcessPayout(pendingIds);
+            setShowPayAllConfirm(false);
+        } catch (error) {
+            console.error('Error in batch payout:', error);
+        }
+    };
+
+    const fetchDoctorPayouts = async () => {
+        try {
+            // 1. Get Doctors
+            const { data: doctors, error: dError } = await supabase
+                .from('doctor_profiles')
+                .select('id, user_id');
+
+            if (dError) {
+                console.error('Doctors error:', JSON.stringify(dError));
+                toast.error(`Error cargando lista de médicos: ${dError.message || 'Error desconocido'}`);
+                return;
+            }
+
+            // 2. Get Profiles for names (independently)
+            const { data: profiles } = await supabase.from('profiles').select('user_id, full_name');
+            const namesMap: Record<string, string> = {};
+            profiles?.forEach(p => namesMap[p.user_id] = p.full_name);
+
+            const start = startOfWeek(selectedWeek, { weekStartsOn: 1 });
+            const end = endOfWeek(selectedWeek, { weekStartsOn: 1 });
+
+            // 3. Get all appointments for the week
+            const { data: allAppointments, error: aError } = await supabase
+                .from('appointments')
+                .select(`
+                    id,
+                    doctor_id,
+                    start_time,
+                    end_time,
+                    payments!inner(amount, status),
+                    rooms (
+                        room_type,
+                        price_per_hour
+                    )
+                `)
+                .eq('payments.status', 'paid')
+                .gte('start_time', start.toISOString())
+                .lte('start_time', end.toISOString());
+
+            if (aError) {
+                console.error('Appointments error:', JSON.stringify(aError));
+            }
+
+            const payoutMap: Record<string, DoctorPayout> = {};
+
+            // Initialize with all existing doctors
+            (doctors || []).forEach(doc => {
+                payoutMap[doc.id] = {
+                    doctor_id: doc.id,
+                    doctor_name: namesMap[doc.user_id] || 'Especialista',
+                    total_appointments: 0,
+                    appointment_revenue: 0,
+                    rental_costs: 0,
+                    net_payout: 0
+                };
+            });
+
+            // Process matches
+            allAppointments?.forEach((apt: any) => {
+                if (payoutMap[apt.doctor_id]) {
+                    const stats = payoutMap[apt.doctor_id];
+                    stats.total_appointments += 1;
+
+                    const paymentAmount = apt.payments?.[0]?.amount || 0;
+                    stats.appointment_revenue += paymentAmount;
+
+                    let rentalCost = 0;
+                    if (apt.rooms) {
+                        if (apt.rooms.room_type === 'virtual') {
+                            rentalCost = 10000;
+                        } else {
+                            const dStart = new Date(apt.start_time);
+                            const dEnd = new Date(apt.end_time);
+                            const durationHours = (dEnd.getTime() - dStart.getTime()) / (1000 * 60 * 60);
+                            rentalCost = (apt.rooms.price_per_hour || 0) * durationHours;
+                        }
+                    }
+                    stats.rental_costs += rentalCost;
+                    stats.net_payout = Math.max(0, stats.appointment_revenue - stats.rental_costs);
+                }
+            });
+
+            setDoctorPayouts(Object.values(payoutMap).sort((a, b) => b.net_payout - a.net_payout));
+        } catch (error: any) {
+            console.error('Payouts exception:', error);
+            toast.error(`Error inesperado al cargar pagos: ${error.message || 'Consulte consola'}`);
+        }
+    };
+
+
+
     const fetchPayments = async () => {
-        const { data, error } = await supabase
-            .from('payments')
-            .select(`
-                id,
-                amount,
-                payment_date,
-                payment_method,
-                status,
-                appointment_id,
-                appointments (
-                    patient_profiles (
-                        profiles (
-                            full_name
+        try {
+            const { data, error } = await supabase
+                .from('payments')
+                .select(`
+                    id,
+                    amount,
+                    paid_at,
+                    created_at,
+                    payment_method,
+                    status,
+                    appointment_id,
+                    appointments (
+                        id,
+                        start_time,
+                        end_time,
+                        rental_id,
+                        doctor_id,
+                        doctor_profiles (
+                            consultation_fee
+                        ),
+                        patient_profiles (
+                            profiles (
+                                full_name
+                            )
+                        ),
+                        rooms (
+                            id,
+                            name,
+                            room_type,
+                            price_per_hour
                         )
                     )
-                )
-            `)
-            .order('payment_date', { ascending: false });
+                `)
+                .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        setPayments(data as any || []);
+            if (error) {
+                console.error('Payments fetch error:', JSON.stringify(error));
+                throw error;
+            }
+            setPayments(data as any || []);
+        } catch (e: any) {
+            console.error('fetchPayments failed:', e);
+        }
     };
 
     const fetchRentals = async () => {
-        const { data, error } = await supabase
-            .from('room_rentals')
-            .select(`
-                id,
-                total_price,
-                start_time,
-                status,
-                renter_name,
-                rooms (
-                    name
-                )
-            `)
-            .order('start_time', { ascending: false });
+        try {
+            const { data, error } = await supabase
+                .from('room_rentals')
+                .select(`
+                    id,
+                    total_price,
+                    start_time,
+                    status,
+                    renter_name,
+                    rooms (
+                        name,
+                        room_type
+                    )
+                `)
+                .order('start_time', { ascending: false });
 
-        if (error) throw error;
-        setRentals(data as any || []);
+            if (error) {
+                console.error('Rentals fetch error:', JSON.stringify(error));
+                throw error;
+            }
+            setRentals(data || []);
+        } catch (e: any) {
+            console.error('fetchRentals failed:', e);
+        }
     };
 
     const handleUpdateStatus = async (id: string, table: 'payments' | 'room_rentals', newStatus: string) => {
@@ -141,29 +385,112 @@ export const AdminPaymentManager = () => {
         const todayEnd = endOfDay(now);
         const last30Days = subDays(now, 30);
 
+        // Normalize payments (Fix 500 peso bug)
+        const normalizedPayments = payments.map(p => {
+            let amount = p.amount;
+            if (amount === 500) {
+                const apt = p.appointments as any;
+                amount = Number(apt?.doctor_profiles?.consultation_fee) || 150000; // Use fee or fallback
+            }
+            return { ...p, amount };
+        });
+
         // Filter completed payments
-        const completedPayments = payments.filter(p => p.status === 'paid' || p.status === 'completed');
-        const completedRentals = rentals.filter(r => r.status === 'confirmed');
+        const completedPayments = normalizedPayments.filter(p => p.status === 'paid' || p.status === 'completed');
+        const completedRentals = rentals.filter(r => r.status === 'confirmed' || r.status === 'paid');
 
-        // Today's revenue
-        const todayPayments = completedPayments.filter(p =>
-            isWithinInterval(parseISO(p.payment_date), { start: todayStart, end: todayEnd })
-        );
-        const todayRentals = completedRentals.filter(r =>
-            isWithinInterval(parseISO(r.start_time), { start: todayStart, end: todayEnd })
-        );
-        const todayTotal = todayPayments.reduce((sum, p) => sum + p.amount, 0) +
-            todayRentals.reduce((sum, r) => sum + r.total_price, 0);
+        // Calculate implicit rental income from appointments
+        let implicitRentalIncome = 0;
+        let totalPaymentsAmount = 0;
+        let virtualIncome = 0;
+        let physicalIncome = 0;
 
-        // This month's revenue
-        const monthPayments = completedPayments.filter(p =>
-            isWithinInterval(parseISO(p.payment_date), { start: monthStart, end: monthEnd })
-        );
-        const monthRentals = completedRentals.filter(r =>
-            isWithinInterval(parseISO(r.start_time), { start: monthStart, end: monthEnd })
-        );
-        const monthTotal = monthPayments.reduce((sum, p) => sum + p.amount, 0) +
-            monthRentals.reduce((sum, r) => sum + r.total_price, 0);
+        const debugRentals: any[] = [];
+
+        completedPayments.forEach(p => {
+            totalPaymentsAmount += p.amount;
+
+            const apt = p.appointments as any;
+            if (apt && apt.rooms) {
+                // If there's an explicit rental record that is ALREADY in completedRentals, don't double count
+                const hasExplicitRental = apt.rental_id && completedRentals.some(r => r.id === apt.rental_id);
+
+                if (!hasExplicitRental) {
+                    let rentalCost = 0;
+                    const isVirtual = apt.rooms.room_type === 'virtual';
+
+                    if (isVirtual) {
+                        rentalCost = 10000; // Fixed price for virtual
+                    } else {
+                        // Calculate based on duration
+                        const start = new Date(apt.start_time);
+                        const end = new Date(apt.end_time);
+                        const durationHours = (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+                        const price = apt.rooms.price_per_hour || 0;
+                        rentalCost = price * durationHours;
+                    }
+                    implicitRentalIncome += rentalCost;
+
+                    if (isVirtual) virtualIncome += rentalCost;
+                    else physicalIncome += rentalCost;
+
+                    if (rentalCost > 0) {
+                        debugRentals.push({
+                            id: p.id,
+                            room: apt.rooms.name,
+                            type: apt.rooms.room_type,
+                            price: apt.rooms.price_per_hour,
+                            cost: rentalCost,
+                            aptAmount: p.amount
+                        });
+                    }
+                }
+            }
+        });
+
+        // Add direct rentals to the split
+        completedRentals.forEach(r => {
+            const cost = r.total_price;
+            const isVirtual = r.rooms?.room_type === 'virtual';
+            if (isVirtual) virtualIncome += cost;
+            else physicalIncome += cost;
+        });
+
+        const directRentalIncome = completedRentals.reduce((sum, r) => sum + r.total_price, 0);
+        const totalRentalIncome = directRentalIncome + implicitRentalIncome;
+        const totalPatientIncome = Math.max(0, totalPaymentsAmount - implicitRentalIncome); // Subtract rental portion
+
+        // Today's revenue (Approximation using same ratio or direct filter? Let's use direct filter for simplicity but adjusting is hard per day.
+        // For simplicity, we'll keep the daily/monthly totals as GROSS for now in the small cards, or we recalculate:
+
+        // Helper to get split for a subset
+        const getSplit = (subsetPayments: any[], subsetRentals: any[]) => {
+            const subPayments = subsetPayments.reduce((s, p) => s + p.amount, 0);
+            let subImplicit = 0;
+            subsetPayments.forEach(p => {
+                if (p.appointments) {
+                    if (p.appointments.rental_id) {
+                        const rent = subsetRentals.find(r => r.id === p.appointments.rental_id);
+                        if (rent) subImplicit += rent.total_price;
+                    }
+                }
+            });
+            return {
+                patient: Math.max(0, subPayments - subImplicit),
+                rental: subsetRentals.reduce((s, r) => s + r.total_price, 0) + subImplicit
+            };
+        };
+
+
+        const getPaymentDate = (p: any) => p.paid_at || p.created_at || new Date().toISOString();
+
+        const todayPayments = completedPayments.filter(p => isWithinInterval(parseISO(getPaymentDate(p)), { start: todayStart, end: todayEnd }));
+        const todayRentals = completedRentals.filter(r => isWithinInterval(parseISO(r.start_time), { start: todayStart, end: todayEnd }));
+        const todaySplit = getSplit(todayPayments, todayRentals);
+
+        const monthPayments = completedPayments.filter(p => isWithinInterval(parseISO(getPaymentDate(p)), { start: monthStart, end: monthEnd }));
+        const monthRentals = completedRentals.filter(r => isWithinInterval(parseISO(r.start_time), { start: monthStart, end: monthEnd }));
+        const monthSplit = getSplit(monthPayments, monthRentals);
 
         // Payment method breakdown
         const methodBreakdown = completedPayments.reduce((acc, p) => {
@@ -179,21 +506,15 @@ export const AdminPaymentManager = () => {
             const dayStart = startOfDay(day);
             const dayEnd = endOfDay(day);
 
-            const dayPayments = completedPayments.filter(p =>
-                isWithinInterval(parseISO(p.payment_date), { start: dayStart, end: dayEnd })
-            );
-            const dayRentals = completedRentals.filter(r =>
-                isWithinInterval(parseISO(r.start_time), { start: dayStart, end: dayEnd })
-            );
-
-            const paymentsTotal = dayPayments.reduce((sum, p) => sum + p.amount, 0);
-            const rentalsTotal = dayRentals.reduce((sum, r) => sum + r.total_price, 0);
+            const dayPayments = completedPayments.filter(p => isWithinInterval(parseISO(getPaymentDate(p)), { start: dayStart, end: dayEnd }));
+            const dayRentals = completedRentals.filter(r => isWithinInterval(parseISO(r.start_time), { start: dayStart, end: dayEnd }));
+            const daySplit = getSplit(dayPayments, dayRentals);
 
             dailyRevenue.push({
                 date: format(day, 'dd/MM', { locale: es }),
-                pacientes: paymentsTotal,
-                alquileres: rentalsTotal,
-                total: paymentsTotal + rentalsTotal
+                pacientes: daySplit.patient,
+                alquileres: daySplit.rental,
+                total: daySplit.patient + daySplit.rental
             });
         }
 
@@ -204,16 +525,19 @@ export const AdminPaymentManager = () => {
             pendingRentals.reduce((sum, r) => sum + r.total_price, 0);
 
         return {
-            todayTotal,
-            monthTotal,
+            todayTotal: todaySplit.patient + todaySplit.rental,
+            monthTotal: monthSplit.patient + monthSplit.rental,
             methodBreakdown,
             dailyRevenue,
             pendingTotal,
             pendingCount: pendingPayments.length + pendingRentals.length,
-            totalPatientIncome: completedPayments.reduce((sum, p) => sum + p.amount, 0),
-            totalRentalIncome: completedRentals.reduce((sum, r) => sum + r.total_price, 0),
+            totalPatientIncome: totalPatientIncome,
+            totalRentalIncome: totalRentalIncome,
+            virtualIncome,
+            physicalIncome,
             monthPaymentsCount: monthPayments.length,
-            monthRentalsCount: monthRentals.length
+            monthRentalsCount: monthRentals.length,
+            debugRentals
         };
     }, [payments, rentals]);
 
@@ -247,24 +571,95 @@ export const AdminPaymentManager = () => {
         value: amount
     }));
 
+    // === NEW LOGIC START ===
+    // === NEW LOGIC START ===
+    // (Duplicate state/handlers removed - using existing ones)
+
+    const isMonday = new Date().getDay() === 1;
+
+    // Group payouts by doctor for display and export
+    const processedPayouts = useMemo(() => {
+        return Object.values(weeklyPayouts.reduce((acc: any, curr) => {
+            const docId = curr.doctor_id;
+            if (!acc[docId]) {
+                acc[docId] = {
+                    ...curr,
+                    total_amount: 0,
+                    count: 0,
+                    payout_ids: []
+                };
+            }
+            acc[docId].total_amount += Number(curr.doctor_payout);
+            acc[docId].count += 1;
+            acc[docId].payout_ids.push(curr.id);
+            return acc;
+        }, {}));
+    }, [weeklyPayouts]);
+
+    const handleExportCSV = () => {
+        if (processedPayouts.length === 0) return;
+
+        const headers = ["Médico", "Citas", "Honorarios", "Deducciones", "Neto a Pagar", "Estado"];
+        const csvContent = [
+            headers.join(','),
+            ...processedPayouts.map((p: any) => {
+                const name = doctorNames[p.doctor_id] || 'Desconocido';
+                const feeTotal = Number(p.consultation_fee || 0) * p.count;
+                const deductions = Number(p.room_rental_cost || 0) * p.count + Number(p.platform_commission || 0) * p.count;
+                return [
+                    `"${name}"`,
+                    p.count,
+                    feeTotal,
+                    deductions,
+                    p.total_amount,
+                    p.status
+                ].join(',');
+            })
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', `corte_medicos_${selectedWeek.toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+    // === NEW LOGIC END ===
+
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
                 <div>
                     <h3 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
                         Gestión de Cobros
                     </h3>
                     <p className="text-sm text-muted-foreground mt-1">Panel de control financiero con estadísticas avanzadas</p>
                 </div>
-                <Button onClick={fetchData} variant="outline" size="sm" className="shadow-sm">
-                    <TrendingUp className="mr-2 h-4 w-4" />
-                    Actualizar Datos
-                </Button>
+                <div className="flex gap-2 items-center">
+                    <div className="flex flex-col items-end mr-4">
+                        <div className="flex gap-2 text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                            <span className={Object.keys(doctorNames).length > 0 ? "text-emerald-500" : "text-amber-500"}>Names: {Object.keys(doctorNames).length}</span>
+                            <span className={doctorPayouts.length > 0 ? "text-emerald-500" : "text-amber-500"}>Stats: {doctorPayouts.length}</span>
+                        </div>
+                    </div>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchData()}
+                        disabled={loading}
+                        className="gap-2 border-slate-200 hover:bg-slate-50"
+                    >
+                        <History className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                        Sincronizar Datos
+                    </Button>
+                </div>
             </div>
 
             {/* Main KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* Today's Revenue */}
                 <Card className="bg-gradient-to-br from-emerald-500 to-emerald-600 text-white border-0 shadow-lg hover:shadow-xl transition-all">
                     <CardHeader className="pb-2">
@@ -296,21 +691,6 @@ export const AdminPaymentManager = () => {
                     </CardContent>
                 </Card>
 
-                {/* Pending Payments */}
-                <Card className="bg-gradient-to-br from-amber-500 to-amber-600 text-white border-0 shadow-lg hover:shadow-xl transition-all">
-                    <CardHeader className="pb-2">
-                        <CardTitle className="text-sm font-medium text-amber-50 flex items-center gap-2">
-                            <AlertCircle className="h-4 w-4" /> Cobros Pendientes
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-3xl font-bold">${statistics.pendingTotal.toLocaleString()}</div>
-                        <p className="text-xs text-amber-100 mt-1">
-                            {statistics.pendingCount} transacciones por verificar
-                        </p>
-                    </CardContent>
-                </Card>
-
                 {/* Total Income */}
                 <Card className="bg-gradient-to-br from-purple-500 to-purple-600 text-white border-0 shadow-lg hover:shadow-xl transition-all">
                     <CardHeader className="pb-2">
@@ -332,12 +712,12 @@ export const AdminPaymentManager = () => {
                 <Card className="border-slate-200 shadow-sm hover:shadow-md transition-all">
                     <CardHeader className="pb-3">
                         <CardTitle className="text-base font-semibold text-slate-700 flex items-center gap-2">
-                            <CreditCard className="h-5 w-5 text-green-600" /> Ingresos por Pacientes
+                            <CreditCard className="h-5 w-5 text-green-600" /> Ingreso por Citas (Pago a Médicos)
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-slate-900">${statistics.totalPatientIncome.toLocaleString()}</div>
-                        <p className="text-sm text-muted-foreground mt-1">Total de citas pagadas</p>
+                        <p className="text-sm text-muted-foreground mt-1">Total disponible para honorarios médicos</p>
                     </CardContent>
                 </Card>
 
@@ -348,8 +728,17 @@ export const AdminPaymentManager = () => {
                         </CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-slate-900">${statistics.totalRentalIncome.toLocaleString()}</div>
-                        <p className="text-sm text-muted-foreground mt-1">Alquiler de consultorios</p>
+                        <div className="text-2xl font-bold text-slate-900 mb-2">${statistics.totalRentalIncome.toLocaleString()}</div>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                                <span className="block text-blue-600 font-medium">Salones Físicos</span>
+                                <span className="font-bold text-slate-700">${statistics.physicalIncome?.toLocaleString() || 0}</span>
+                            </div>
+                            <div className="bg-purple-50 p-2 rounded border border-purple-100">
+                                <span className="block text-purple-600 font-medium">Sala Virtual</span>
+                                <span className="font-bold text-slate-700">${statistics.virtualIncome?.toLocaleString() || 0}</span>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -381,7 +770,7 @@ export const AdminPaymentManager = () => {
                                     </defs>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                                     <XAxis dataKey="date" tick={{ fill: '#64748b', fontSize: 12 }} />
-                                    <YAxis tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(value) => `$${value}`} />
+                                    <YAxis tick={{ fill: '#64748b', fontSize: 12 }} tickFormatter={(value) => `$${value} `} />
                                     <Tooltip
                                         contentStyle={{
                                             backgroundColor: '#fff',
@@ -389,7 +778,7 @@ export const AdminPaymentManager = () => {
                                             border: '1px solid #e2e8f0',
                                             boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
                                         }}
-                                        formatter={(value: any) => `$${value.toLocaleString()}`}
+                                        formatter={(value: any) => `$${value.toLocaleString()} `}
                                     />
                                     <Area type="monotone" dataKey="pacientes" name="Pacientes" stroke="#10b981" fillOpacity={1} fill="url(#colorPacientes)" />
                                     <Area type="monotone" dataKey="alquileres" name="Alquileres" stroke="#3b82f6" fillOpacity={1} fill="url(#colorAlquileres)" />
@@ -417,16 +806,16 @@ export const AdminPaymentManager = () => {
                                         cx="50%"
                                         cy="50%"
                                         labelLine={false}
-                                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}% `}
                                         outerRadius={80}
                                         fill="#8884d8"
                                         dataKey="value"
                                     >
                                         {pieChartData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                            <Cell key={`cell - ${index} `} fill={COLORS[index % COLORS.length]} />
                                         ))}
                                     </Pie>
-                                    <Tooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
+                                    <Tooltip formatter={(value: any) => `$${value.toLocaleString()} `} />
                                 </RechartsPieChart>
                             </ResponsiveContainer>
                         </div>
@@ -436,240 +825,761 @@ export const AdminPaymentManager = () => {
 
             {/* Tabs for Detailed Tables */}
             <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-3 bg-slate-100 p-1 rounded-lg">
-                    <TabsTrigger value="overview" className="data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200">
-                        <BarChart3 className="mr-2 h-4 w-4" /> Resumen
+                <TabsList className="bg-slate-100 p-1 rounded-lg">
+                    <TabsTrigger value="overview" className="gap-2">
+                        <PieChart className="h-4 w-4" /> Resumen
                     </TabsTrigger>
-                    <TabsTrigger value="patients" className="data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200">
-                        <CreditCard className="mr-2 h-4 w-4" /> Pagos de Pacientes
+                    <TabsTrigger value="doctors" className="gap-2">
+                        <Stethoscope className="h-4 w-4" /> Pagos a Médicos
                     </TabsTrigger>
-                    <TabsTrigger value="doctors" className="data-[state=active]:bg-white data-[state=active]:shadow-sm transition-all duration-200">
-                        <Building2 className="mr-2 h-4 w-4" /> Cobros a Médicos
+                    <TabsTrigger value="historial" className="gap-2">
+                        <History className="h-4 w-4" /> Historial de Cortes
                     </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="mt-4">
-                    <Card className="border-slate-200 shadow-sm">
-                        <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
-                            <CardTitle className="text-xl">Resumen Financiero</CardTitle>
-                            <CardDescription>Vista general de todas las transacciones</CardDescription>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="text-center p-6 bg-gradient-to-br from-green-50 to-white rounded-lg border border-green-100">
-                                    <div className="text-sm font-medium text-green-700 mb-2">Ingresos del Día</div>
-                                    <div className="text-3xl font-bold text-slate-900">${statistics.todayTotal.toLocaleString()}</div>
+                    <div className="space-y-6">
+                        {/* Payment Cycle Explanation */}
+                        <Card className="border-0 shadow-xl bg-gradient-to-br from-teal-600 to-emerald-600 text-white overflow-hidden">
+                            <CardContent className="p-8">
+                                <div className="flex items-start gap-4 mb-6">
+                                    <div className="h-12 w-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+                                        <Wallet className="h-6 w-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-bold mb-2">Ciclo de Pagos del Sistema</h3>
+                                        <p className="text-teal-50 text-sm">
+                                            Flujo completo desde la reserva del paciente hasta la distribución de fondos
+                                        </p>
+                                    </div>
                                 </div>
-                                <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-white rounded-lg border border-blue-100">
-                                    <div className="text-sm font-medium text-blue-700 mb-2">Ingresos del Mes</div>
-                                    <div className="text-3xl font-bold text-slate-900">${statistics.monthTotal.toLocaleString()}</div>
-                                </div>
-                                <div className="text-center p-6 bg-gradient-to-br from-amber-50 to-white rounded-lg border border-amber-100">
-                                    <div className="text-sm font-medium text-amber-700 mb-2">Pendientes</div>
-                                    <div className="text-3xl font-bold text-slate-900">${statistics.pendingTotal.toLocaleString()}</div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
 
-                <TabsContent value="patients" className="mt-4">
-                    <Card className="border-slate-200 shadow-sm">
-                        <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <CardTitle className="text-lg">Transacciones de Citas</CardTitle>
-                                    <CardDescription>Historial detallado de pagos de pacientes</CardDescription>
+                                {/* Flow Steps */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    {/* Step 1: Patient Payment */}
+                                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-5 border border-white/20">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">1</div>
+                                            <h4 className="font-semibold text-white">Paciente Paga</h4>
+                                        </div>
+                                        <div className="space-y-2 text-sm text-teal-50">
+                                            <div className="flex items-center gap-2">
+                                                <ArrowUpRight className="h-4 w-4" />
+                                                <span>Valor de la consulta</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <ArrowUpRight className="h-4 w-4" />
+                                                <span>+ Alquiler consultorio</span>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-white/20">
+                                                <div className="text-xs opacity-80">Total ingresa a:</div>
+                                                <div className="font-bold text-white">CorpoOriente</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Step 2: Weekly Distribution */}
+                                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-5 border border-white/20">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">2</div>
+                                            <h4 className="font-semibold text-white">Cada Lunes</h4>
+                                        </div>
+                                        <div className="space-y-2 text-sm text-teal-50">
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="h-4 w-4" />
+                                                <span>Sistema genera pagos</span>
+                                            </div>
+                                            <div className="mt-3 space-y-1.5 text-xs">
+                                                <div className="flex justify-between">
+                                                    <span className="opacity-80">→ A Médicos:</span>
+                                                    <span className="font-semibold">Citas - Alquiler</span>
+                                                </div>
+                                                <div className="flex justify-between">
+                                                    <span className="opacity-80">→ A Software:</span>
+                                                    <span className="font-semibold">10% Alquiler</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Step 3: Distribution */}
+                                    <div className="bg-white/10 backdrop-blur-md rounded-xl p-5 border border-white/20">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="h-8 w-8 rounded-full bg-white/20 flex items-center justify-center text-sm font-bold">3</div>
+                                            <h4 className="font-semibold text-white">Distribución</h4>
+                                        </div>
+                                        <div className="space-y-2 text-sm text-teal-50">
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle2 className="h-4 w-4" />
+                                                <span>Pagos procesados</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle2 className="h-4 w-4" />
+                                                <span>Comisiones enviadas</span>
+                                            </div>
+                                            <div className="mt-3 pt-3 border-t border-white/20">
+                                                <div className="text-xs opacity-80">Balance neto:</div>
+                                                <div className="font-bold text-white">CorpoOriente</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <Badge variant="secondary" className="text-sm">{payments.length} Registros</Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="max-h-[500px] overflow-y-auto">
-                                <Table>
-                                    <TableHeader className="sticky top-0 bg-white z-10">
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableHead>Fecha</TableHead>
-                                            <TableHead>Paciente</TableHead>
-                                            <TableHead>Método</TableHead>
-                                            <TableHead>Monto</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {loading ? (
-                                            <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-8">
-                                                    <div className="flex items-center justify-center text-muted-foreground">
-                                                        <Clock className="mr-2 h-4 w-4 animate-spin" /> Cargando datos...
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : payments.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                                                    No hay pagos registrados
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : (
-                                            payments.slice(0, 100).map((payment) => (
-                                                <TableRow key={payment.id} className="group hover:bg-slate-50/50 transition-colors">
-                                                    <TableCell className="font-medium text-slate-700">
-                                                        {format(new Date(payment.payment_date), "dd/MM/yyyy", { locale: es })}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-green-100 to-green-200 flex items-center justify-center text-xs font-bold text-green-700">
-                                                                {payment.appointments?.patient_profiles?.profiles?.full_name?.charAt(0) || 'P'}
-                                                            </div>
-                                                            <span className="font-medium">
-                                                                {payment.appointments?.patient_profiles?.profiles?.full_name || 'Desconocido'}
-                                                            </span>
-                                                        </div>
-                                                    </TableCell>
-                                                    <TableCell className="text-sm text-slate-600">
-                                                        {getMethodLabel(payment.payment_method)}
-                                                    </TableCell>
-                                                    <TableCell className="font-bold text-slate-900">
-                                                        ${payment.amount.toLocaleString()}
-                                                    </TableCell>
-                                                    <TableCell>
-                                                        {getStatusBadge(payment.status)}
-                                                    </TableCell>
-                                                    <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-slate-200">
-                                                                    <span className="sr-only">Abrir menú</span>
-                                                                    <MoreHorizontal className="h-4 w-4" />
+                            </CardContent>
+                        </Card>
+
+                        {/* Financial Breakdown */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Income Summary */}
+                            <Card className="border-slate-200 shadow-lg">
+                                <CardHeader className="bg-gradient-to-r from-emerald-50 to-white border-b border-emerald-100">
+                                    <CardTitle className="text-lg flex items-center gap-2 text-emerald-900">
+                                        <TrendingUp className="h-5 w-5 text-emerald-600" />
+                                        Ingresos Totales Recibidos
+                                    </CardTitle>
+                                    <CardDescription>Pagos completados de pacientes</CardDescription>
+                                </CardHeader>
+                                <CardContent className="pt-6">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                                            <div>
+                                                <div className="text-sm text-emerald-700 font-medium mb-1">Pagos de Citas</div>
+                                                <div className="text-2xl font-bold text-emerald-900">
+                                                    ${statistics.totalPatientIncome.toLocaleString()}
+                                                </div>
+                                            </div>
+                                            <CreditCard className="h-8 w-8 text-emerald-600" />
+                                        </div>
+
+                                        <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                            <div>
+                                                <div className="text-sm text-blue-700 font-medium mb-1">Alquiler Consultorios</div>
+                                                <div className="text-2xl font-bold text-blue-900">
+                                                    ${statistics.totalRentalIncome.toLocaleString()}
+                                                </div>
+                                            </div>
+                                            <Building2 className="h-8 w-8 text-blue-600" />
+                                        </div>
+
+                                        <div className="pt-3 border-t-2 border-slate-200">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-sm font-medium text-slate-600">Total Ingresado</span>
+                                                <span className="text-3xl font-bold text-slate-900">
+                                                    ${(statistics.totalPatientIncome + statistics.totalRentalIncome).toLocaleString()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+
+                            {/* Payout Summary */}
+                            <Card className="border-slate-200 shadow-lg">
+                                <CardHeader className="bg-gradient-to-r from-purple-50 to-white border-b border-purple-100">
+                                    <CardTitle className="text-lg flex items-center gap-2 text-purple-900">
+                                        <ArrowDownRight className="h-5 w-5 text-purple-600" />
+                                        Distribución de Fondos
+                                    </CardTitle>
+                                    <CardDescription>Cálculo de pagos semanales</CardDescription>
+                                </CardHeader>
+                                <CardContent className="pt-6">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between p-4 bg-indigo-50 rounded-xl border border-indigo-100">
+                                            <div>
+                                                <div className="text-sm text-indigo-700 font-medium mb-1">Por Pagar a Médicos</div>
+                                                <div className="text-xs text-indigo-600 mb-2">Citas - Alquileres</div>
+                                                <div className="text-2xl font-bold text-indigo-900">
+                                                    ${(statistics.totalPatientIncome - statistics.totalRentalIncome).toLocaleString()}
+                                                </div>
+                                            </div>
+                                            <Stethoscope className="h-8 w-8 text-indigo-600" />
+                                        </div>
+
+                                        <div className="relative flex items-center justify-between p-4 bg-violet-50 rounded-xl border border-violet-100">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <div className="text-sm text-violet-700 font-medium">Comisión ArímeSoftware</div>
+                                                    {isSuperAdmin && (
+                                                        <Dialog open={editingCommission} onOpenChange={setEditingCommission}>
+                                                            <DialogTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="h-6 px-2 text-violet-600 hover:text-violet-800 hover:bg-violet-100"
+                                                                    onClick={() => setTempCommissionRate(commissionRate)}
+                                                                >
+                                                                    <Settings className="h-3 w-3 mr-1" />
+                                                                    Configurar
                                                                 </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                                                <DropdownMenuItem onClick={() => handleUpdateStatus(payment.id, 'payments', 'paid')}>
-                                                                    <CheckCircle2 className="mr-2 h-4 w-4" /> Marcar Pagado
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => handleUpdateStatus(payment.id, 'payments', 'pending')}>
-                                                                    <Clock className="mr-2 h-4 w-4" /> Marcar Pendiente
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem className="text-red-600" onClick={() => handleUpdateStatus(payment.id, 'payments', 'cancelled')}>
-                                                                    <Trash2 className="mr-2 h-4 w-4" /> Cancelar Pago
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
-                                                    </TableCell>
-                                                </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </CardContent>
-                    </Card>
+                                                            </DialogTrigger>
+                                                            <DialogContent>
+                                                                <DialogHeader>
+                                                                    <DialogTitle>Configurar Comisión</DialogTitle>
+                                                                </DialogHeader>
+                                                                <div className="space-y-4 py-4">
+                                                                    <div className="space-y-2">
+                                                                        <Label htmlFor="commission">Porcentaje de Comisión (%)</Label>
+                                                                        <Input
+                                                                            id="commission"
+                                                                            type="number"
+                                                                            min="0"
+                                                                            max="100"
+                                                                            step="0.1"
+                                                                            value={tempCommissionRate}
+                                                                            onChange={(e) => setTempCommissionRate(parseFloat(e.target.value) || 0)}
+                                                                        />
+                                                                    </div>
+                                                                </div>
+                                                                <DialogFooter>
+                                                                    <Button variant="outline" onClick={() => setEditingCommission(false)}>
+                                                                        Cancelar
+                                                                    </Button>
+                                                                    <Button onClick={() => {
+                                                                        setCommissionRate(tempCommissionRate);
+                                                                        setEditingCommission(false);
+                                                                        toast.success(`Comisión actualizada a ${tempCommissionRate}% `);
+                                                                    }}>
+                                                                        Guardar
+                                                                    </Button>
+                                                                </DialogFooter>
+                                                            </DialogContent>
+                                                        </Dialog>
+                                                    )}
+                                                </div>
+                                                <div className="text-xs text-violet-600 mb-2">{commissionRate}% de Alquileres</div>
+                                                <div className="text-2xl font-bold text-violet-900">
+                                                    ${(statistics.totalRentalIncome * (commissionRate / 100)).toLocaleString()}
+                                                </div>
+                                                {isSuperAdmin && (
+                                                    <Button
+                                                        className="mt-3 bg-violet-600 hover:bg-violet-700 text-white"
+                                                        size="sm"
+                                                        onClick={() => {
+                                                            toast.success('Generando factura...');
+                                                            // TODO: Implement actual invoice generation
+                                                        }}
+                                                    >
+                                                        <FileText className="h-4 w-4 mr-2" />
+                                                        Generar Factura
+                                                    </Button>
+                                                )}
+                                            </div>
+                                            <DollarSign className="h-8 w-8 text-violet-600" />
+                                        </div>
+
+                                        <div className="pt-3 border-t-2 border-slate-200">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-sm font-medium text-slate-600">Balance Neto CorpoOriente</span>
+                                                <span className="text-3xl font-bold text-teal-700">
+                                                    ${(statistics.totalRentalIncome * ((100 - commissionRate) / 100)).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-500">{100 - commissionRate}% del valor de alquileres queda en la corporación</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {/* Current Period Summary */}
+                        <Card className="border-slate-200 shadow-lg">
+                            <CardHeader className="bg-gradient-to-r from-slate-50 to-white border-b border-slate-100">
+                                <CardTitle className="text-xl flex items-center gap-2">
+                                    <BarChart3 className="h-5 w-5 text-teal-600" />
+                                    Resumen del Período Actual
+                                </CardTitle>
+                                <CardDescription>Vista rápida de ingresos y pendientes</CardDescription>
+                            </CardHeader>
+                            <CardContent className="pt-6">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div className="text-center p-6 bg-gradient-to-br from-green-50 to-white rounded-xl border border-green-100 shadow-sm hover:shadow-md transition-shadow">
+                                        <Calendar className="h-8 w-8 text-green-600 mx-auto mb-3" />
+                                        <div className="text-sm font-medium text-green-700 mb-2">Ingresos del Día</div>
+                                        <div className="text-3xl font-bold text-slate-900">${statistics.todayTotal.toLocaleString()}</div>
+                                        <div className="text-xs text-slate-500 mt-2">Actualizado en tiempo real</div>
+                                    </div>
+                                    <div className="text-center p-6 bg-gradient-to-br from-blue-50 to-white rounded-xl border border-blue-100 shadow-sm hover:shadow-md transition-shadow">
+                                        <TrendingUp className="h-8 w-8 text-blue-600 mx-auto mb-3" />
+                                        <div className="text-sm font-medium text-blue-700 mb-2">Ingresos del Mes</div>
+                                        <div className="text-3xl font-bold text-slate-900">${statistics.monthTotal.toLocaleString()}</div>
+                                        <div className="text-xs text-slate-500 mt-2">{statistics.monthPaymentsCount} citas + {statistics.monthRentalsCount} alquileres</div>
+                                    </div>
+                                    <div className="text-center p-6 bg-gradient-to-br from-amber-50 to-white rounded-xl border border-amber-100 shadow-sm hover:shadow-md transition-shadow">
+                                        <AlertCircle className="h-8 w-8 text-amber-600 mx-auto mb-3" />
+                                        <div className="text-sm font-medium text-amber-700 mb-2">Cobros Pendientes</div>
+                                        <div className="text-3xl font-bold text-slate-900">${statistics.pendingTotal.toLocaleString()}</div>
+                                        <div className="text-xs text-slate-500 mt-2">{statistics.pendingCount} transacciones</div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
 
                 <TabsContent value="doctors" className="mt-4">
-                    <Card className="border-slate-200 shadow-sm">
-                        <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-                            <div className="flex justify-between items-center">
+                    <Card className="border-slate-200 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-indigo-50 via-purple-50 to-white border-b border-indigo-100">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                    <CardTitle className="text-lg">Cobros de Alquiler de Espacios</CardTitle>
-                                    <CardDescription>Pagos de médicos por uso de consultorios</CardDescription>
+                                    <CardTitle className="text-xl flex items-center gap-2 text-indigo-900">
+                                        <Stethoscope className="h-5 w-5 text-indigo-600" />
+                                        Gestión de Pagos a Médicos
+                                    </CardTitle>
+                                    <CardDescription className="mt-1">
+                                        Genera y procesa los cortes semanales (Lunes)
+                                    </CardDescription>
                                 </div>
-                                <Badge variant="secondary" className="text-sm">{rentals.length} Registros</Badge>
+                                <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-indigo-100 shadow-sm">
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setSelectedWeek(subDays(selectedWeek, 7))}
+                                    >
+                                        <ChevronRight className="h-4 w-4 rotate-180" />
+                                    </Button>
+                                    <div className="flex items-center gap-2 px-2 text-sm font-medium">
+                                        <Calendar className="h-4 w-4 text-indigo-500" />
+                                        <span>
+                                            Semana: {format(startOfWeek(selectedWeek, { weekStartsOn: 1 }), 'd MMM', { locale: es })} - {format(endOfWeek(selectedWeek, { weekStartsOn: 1 }), 'd MMM', { locale: es })}
+                                        </span>
+                                    </div>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => setSelectedWeek(addDays(selectedWeek, 7))}
+                                        disabled={selectedWeek > new Date()}
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </Button>
+                                </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="max-h-[500px] overflow-y-auto">
-                                <Table>
-                                    <TableHeader className="sticky top-0 bg-white z-10">
-                                        <TableRow className="hover:bg-transparent">
-                                            <TableHead>Fecha Uso</TableHead>
-                                            <TableHead>Médico / Profesional</TableHead>
-                                            <TableHead>Espacio</TableHead>
-                                            <TableHead>Monto Total</TableHead>
-                                            <TableHead>Estado</TableHead>
-                                            <TableHead className="text-right">Acciones</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {loading ? (
-                                            <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-8">
-                                                    <div className="flex items-center justify-center text-muted-foreground">
-                                                        <Clock className="mr-2 h-4 w-4 animate-spin" /> Cargando datos...
-                                                    </div>
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : rentals.length === 0 ? (
-                                            <TableRow>
-                                                <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
-                                                    No hay registros de alquileres
-                                                </TableCell>
-                                            </TableRow>
+                        <CardContent className="p-6">
+                            {/* Actions Bar */}
+                            <div className="flex justify-between items-center mb-6">
+                                <div className="flex items-center gap-4">
+                                    <div className="text-sm text-slate-500">
+                                        Estado del corte: <Badge variant={weeklyPayouts.length > 0 ? 'secondary' : 'outline'}>
+                                            {weeklyPayouts.length > 0 ? (
+                                                weeklyPayouts.some(p => p.status === 'pending') ? 'Pendiente de Pago' : 'Procesado'
+                                            ) : 'No generado'}
+                                        </Badge>
+                                    </div>
+                                    {!isMonday && (
+                                        <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1 rounded-md text-xs font-medium border border-amber-200">
+                                            <AlertCircle className="h-3.5 w-3.5" />
+                                            Pagos habilitados solo los Lunes
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    {processedPayouts.length > 0 && (
+                                        <Button
+                                            variant="outline"
+                                            onClick={handleExportCSV}
+                                            className="border-slate-200 text-slate-700 hover:bg-slate-50"
+                                            title="Descargar reporte en CSV"
+                                        >
+                                            <Download className="mr-2 h-4 w-4" />
+                                            Exportar
+                                        </Button>
+                                    )}
+                                    <Button
+                                        onClick={() => setShowGenerateConfirm(true)}
+                                        disabled={generatingPayouts || weeklyPayouts.length > 0}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                    >
+                                        {generatingPayouts ? (
+                                            <>
+                                                <Clock className="mr-2 h-4 w-4 animate-spin" />
+                                                Calculando...
+                                            </>
                                         ) : (
-                                            rentals.slice(0, 100).map((rental) => (
-                                                <TableRow key={rental.id} className="group hover:bg-slate-50/50 transition-colors">
-                                                    <TableCell className="font-medium text-slate-700">
-                                                        {format(new Date(rental.start_time), "dd/MM/yyyy HH:mm", { locale: es })}
-                                                    </TableCell>
-                                                    <TableCell>
+                                            <>
+                                                <History className="mr-2 h-4 w-4" />
+                                                Generar Corte
+                                            </>
+                                        )}
+                                    </Button>
+                                    {weeklyPayouts.some(p => p.status === 'pending') && (
+                                        <Button
+                                            onClick={() => setShowPayAllConfirm(true)}
+                                            disabled={!isMonday}
+                                            className={`${!isMonday ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} `}
+                                            title={!isMonday ? 'El pago masivo solo está disponible los lunes' : 'Pagar todo'}
+                                        >
+                                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                                            Pagar Todo
+                                        </Button>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Payouts Table */}
+                            {loading ? (
+                                <div className="flex items-center justify-center py-20 text-muted-foreground">
+                                    <Clock className="mr-3 h-6 w-6 animate-spin" />
+                                    <span className="text-lg">Cargando información...</span>
+                                </div>
+                            ) : weeklyPayouts.length > 0 ? (
+                                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50">
+                                            <TableRow>
+                                                <TableHead>Médico</TableHead>
+                                                <TableHead className="text-center">Citas</TableHead>
+                                                <TableHead className="text-right">Honorarios</TableHead>
+                                                <TableHead className="text-right">Deducciones</TableHead>
+                                                <TableHead className="text-right">Neto a Pagar</TableHead>
+                                                <TableHead className="text-center">Estado</TableHead>
+                                                <TableHead className="text-right">Acciones</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {processedPayouts.map((payout: any) => (
+                                                <TableRow key={payout.doctor_id} className="hover:bg-slate-50/50">
+                                                    <TableCell className="font-medium">
                                                         <div className="flex items-center gap-2">
-                                                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center text-xs font-bold text-blue-700">
-                                                                {rental.renter_name?.charAt(0) || 'Dr'}
+                                                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs">
+                                                                {(doctorNames[payout.doctor_id] || 'Dr').substring(0, 2).toUpperCase()}
                                                             </div>
-                                                            <span className="font-medium">
-                                                                {rental.renter_name || 'Desconocido'}
-                                                            </span>
+                                                            {doctorNames[payout.doctor_id] || 'Desconocido'}
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="text-sm text-slate-600">
-                                                        <div className="flex items-center gap-1">
-                                                            <Building2 className="h-3 w-3" />
-                                                            {rental.rooms?.name || '---'}
-                                                        </div>
+                                                    <TableCell className="text-center">
+                                                        <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                                                            {payout.count}
+                                                        </Badge>
                                                     </TableCell>
-                                                    <TableCell className="font-bold text-slate-900">
-                                                        ${rental.total_price.toLocaleString()}
+                                                    <TableCell className="text-right font-medium text-slate-600">
+                                                        ${(Number(payout.consultation_fee || 0) * payout.count).toLocaleString()}
                                                     </TableCell>
-                                                    <TableCell>
-                                                        {getStatusBadge(rental.status)}
+                                                    <TableCell className="text-right text-red-600">
+                                                        -${(Number(payout.room_rental_cost || 0) * payout.count + Number(payout.platform_commission || 0) * payout.count).toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-bold text-emerald-600 text-lg">
+                                                        ${payout.total_amount.toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        {payout.status === 'processed' ? (
+                                                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                                                                Pagado
+                                                            </Badge>
+                                                        ) : (
+                                                            <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                                                                Pendiente
+                                                            </Badge>
+                                                        )}
                                                     </TableCell>
                                                     <TableCell className="text-right">
-                                                        <DropdownMenu>
-                                                            <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-slate-200">
-                                                                    <span className="sr-only">Abrir menú</span>
-                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => setViewingPayoutDetail(payout)}
+                                                                className="h-8 px-2 border-slate-200 text-slate-600 hover:text-indigo-600"
+                                                                title="Ver Pagaré / Detalle"
+                                                            >
+                                                                <FileText className="h-4 w-4 mr-1" />
+                                                                Detalle
+                                                            </Button>
+                                                            {payout.status === 'processed' ? (
+                                                                <div className="flex items-center text-emerald-600 text-xs font-medium px-2 py-1 bg-emerald-50 rounded-md border border-emerald-100">
+                                                                    <CheckCircle2 className="h-3 w-3 mr-1" /> Pagado
+                                                                </div>
+                                                            ) : (
+                                                                <Button
+                                                                    size="sm"
+                                                                    disabled={!isMonday}
+                                                                    onClick={() => handleProcessPayout(payout.payout_ids)}
+                                                                    className={`${!isMonday ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} h-8 px-3`}
+                                                                >
+                                                                    <DollarSign className="h-4 w-4 mr-1" /> Pagar
                                                                 </Button>
-                                                            </DropdownMenuTrigger>
-                                                            <DropdownMenuContent align="end">
-                                                                <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                                                                <DropdownMenuItem onClick={() => handleUpdateStatus(rental.id, 'room_rentals', 'confirmed')}>
-                                                                    <CheckCircle2 className="mr-2 h-4 w-4" /> Confirmar Pago
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuItem onClick={() => handleUpdateStatus(rental.id, 'room_rentals', 'pending')}>
-                                                                    <Clock className="mr-2 h-4 w-4" /> Marcar Pendiente
-                                                                </DropdownMenuItem>
-                                                                <DropdownMenuSeparator />
-                                                                <DropdownMenuItem className="text-red-600" onClick={() => handleUpdateStatus(rental.id, 'room_rentals', 'cancelled')}>
-                                                                    <Trash2 className="mr-2 h-4 w-4" /> Cancelar
-                                                                </DropdownMenuItem>
-                                                            </DropdownMenuContent>
-                                                        </DropdownMenu>
+                                                            )}
+                                                        </div>
                                                     </TableCell>
                                                 </TableRow>
-                                            ))
-                                        )}
-                                    </TableBody>
-                                </Table>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            ) : doctorPayouts.length > 0 ? (
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
+                                        <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-blue-800">Vista Previa - Corte no generado</h4>
+                                            <p className="text-xs text-blue-600 mt-1">
+                                                Estos valores se actualizan en tiempo real según las citas finalizadas.
+                                                Para congelar los montos y proceder al pago, haga clic en "Generar Corte".
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="border border-slate-200 rounded-lg overflow-hidden opacity-75 grayscale-[30%]">
+                                        <Table>
+                                            <TableHeader className="bg-slate-50">
+                                                <TableRow>
+                                                    <TableHead>Médico</TableHead>
+                                                    <TableHead className="text-center">Citas</TableHead>
+                                                    <TableHead className="text-right">Honorarios</TableHead>
+                                                    <TableHead className="text-right">Deducciones</TableHead>
+                                                    <TableHead className="text-right">Neto Estimado</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {doctorPayouts.map((payout) => (
+                                                    <TableRow key={payout.doctor_id}>
+                                                        <TableCell className="font-medium">
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-xs">
+                                                                    {(payout.doctor_name || 'Dr').substring(0, 2).toUpperCase()}
+                                                                </div>
+                                                                {payout.doctor_name}
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="text-center">
+                                                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                                                                {payout.total_appointments}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-medium text-slate-600">
+                                                            ${payout.appointment_revenue.toLocaleString()}
+                                                        </TableCell>
+                                                        <TableCell className="text-right text-red-600">
+                                                            -${payout.rental_costs.toLocaleString()}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-bold text-slate-700 text-lg">
+                                                            ${payout.net_payout.toLocaleString()}
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                                    <div className="h-16 w-16 rounded-full bg-indigo-50 flex items-center justify-center mb-4">
+                                        <Calendar className="h-8 w-8 text-indigo-300" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-700">Sin médicos registrados</h3>
+                                    <p className="text-sm text-slate-500 max-w-sm mt-2">
+                                        No se encontraron perfiles de médicos activos en el sistema.
+                                    </p>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="historial" className="mt-4">
+                    <Card className="border-slate-200 shadow-lg">
+                        <CardHeader className="bg-slate-50 border-b">
+                            <CardTitle className="text-xl flex items-center gap-2 text-slate-900">
+                                <History className="h-5 w-5 text-indigo-600" />
+                                Historial de Cortes Pagados
+                            </CardTitle>
+                            <CardDescription>
+                                Registro histórico de liquidaciones enviadas a los especialistas
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                            <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                                <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                                    <Clock className="h-8 w-8 text-slate-300" />
+                                </div>
+                                <h3 className="text-lg font-semibold text-slate-700">Módulo en construcción</h3>
+                                <p className="text-sm text-slate-500 max-w-sm mt-2">
+                                    Aquí podrás consultar reportes consolidados de pagos anteriores, incluyendo comprobantes y detalles bancarios.
+                                </p>
                             </div>
                         </CardContent>
                     </Card>
                 </TabsContent>
             </Tabs>
-        </div>
+
+            {/* Confirmation Dialog for Generation */}
+            <Dialog open={showGenerateConfirm} onOpenChange={setShowGenerateConfirm}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-xl text-indigo-900">
+                            <AlertCircle className="h-6 w-6 text-amber-500" />
+                            ¿Generar corte semanal?
+                        </DialogTitle>
+                        <DialogDescription className="pt-2">
+                            Esta acción calculará los honorarios netos de todos los médicos para la semana seleccionada:
+                            <div className="mt-2 p-3 bg-indigo-50 rounded-lg text-indigo-700 text-xs leading-relaxed">
+                                <div className="font-bold mb-1 underline">Se aplicará:</div>
+                                <ul className="list-disc ml-4 space-y-1">
+                                    <li>Cobro de consulta (pago del paciente)</li>
+                                    <li>Deducción por consultorio físico (por hora)</li>
+                                    <li>Deducción por consultorio virtual (tarifa fija $10,000)</li>
+                                    <li>Comisión de la plataforma</li>
+                                </ul>
+                            </div>
+                            <div className="mt-3 text-slate-600">
+                                Una vez generado, el corte será inmutable hasta procesar los pagos.
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="outline" onClick={() => setShowGenerateConfirm(false)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleGeneratePayouts}
+                            disabled={generatingPayouts}
+                            className="bg-indigo-600 hover:bg-indigo-700"
+                        >
+                            Confirmar y Generar
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Pagaré / Detail Modal */}
+            <Dialog open={!!viewingPayoutDetail} onOpenChange={() => setViewingPayoutDetail(null)}>
+                <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-2xl text-indigo-900">
+                            <FileText className="h-6 w-6 text-indigo-600" />
+                            Pagaré de Liquidación
+                        </DialogTitle>
+                        <DialogDescription>
+                            Detalle de honorarios para <strong>{viewingPayoutDetail ? doctorNames[viewingPayoutDetail.doctor_id] : ''}</strong>
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {viewingPayoutDetail && (
+                        <div className="space-y-6 pt-4">
+                            <div className="grid grid-cols-3 gap-4">
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                                    <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Citas</div>
+                                    <div className="text-2xl font-bold">{viewingPayoutDetail.count}</div>
+                                </div>
+                                <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                                    <div className="text-xs text-emerald-600 uppercase tracking-wider mb-1">Neto a Transferir</div>
+                                    <div className="text-2xl font-bold text-emerald-700">${viewingPayoutDetail.total_amount.toLocaleString()}</div>
+                                </div>
+                                <div className="p-4 bg-indigo-50 rounded-xl border border-indigo-100 text-center">
+                                    <div className="text-xs text-indigo-600 uppercase tracking-wider mb-1">Estado</div>
+                                    <Badge variant="outline" className={viewingPayoutDetail.status === 'processed' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"}>
+                                        {viewingPayoutDetail.status === 'processed' ? 'Pagado' : 'Pendiente'}
+                                    </Badge>
+                                </div>
+                            </div>
+
+                            {/* Bank Account Info */}
+                            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <Building2 className="h-3.5 w-3.5" /> Datos para Transferencia
+                                </h4>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 font-medium">BANCO</div>
+                                        <div className="text-sm font-semibold text-slate-700">{doctorProfiles[viewingPayoutDetail.doctor_id]?.bank_name || 'No registrado'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 font-medium">NÚMERO DE CUENTA</div>
+                                        <div className="text-sm font-semibold text-slate-700 font-mono">{doctorProfiles[viewingPayoutDetail.doctor_id]?.account_number || 'N/A'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 font-medium">TIPO DE CUENTA</div>
+                                        <div className="text-sm font-bold text-indigo-600">{doctorProfiles[viewingPayoutDetail.doctor_id]?.account_type || 'N/A'}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 font-medium font-bold">TOTAL A PAGAR</div>
+                                        <div className="text-sm font-bold text-emerald-600">${viewingPayoutDetail.total_amount.toLocaleString()}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border rounded-xl overflow-hidden">
+                                <Table>
+                                    <TableHeader className="bg-slate-50">
+                                        <TableRow>
+                                            <TableHead className="text-xs">Detalle / Cita</TableHead>
+                                            <TableHead className="text-right text-xs">Consulta</TableHead>
+                                            <TableHead className="text-right text-xs">Alquiler</TableHead>
+                                            <TableHead className="text-right text-xs">Comisión</TableHead>
+                                            <TableHead className="text-right text-xs font-bold">Neto</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {weeklyPayouts
+                                            .filter(p => p.doctor_id === viewingPayoutDetail.doctor_id)
+                                            .map((item, idx) => (
+                                                <TableRow key={item.id}>
+                                                    <TableCell className="text-xs">
+                                                        {item.appointment_id ? (
+                                                            <div>
+                                                                <div className="font-medium">Cita #{idx + 1}</div>
+                                                                <div className="text-[10px] text-slate-400 font-mono">ID: {item.appointment_id.substring(0, 8)}...</div>
+                                                            </div>
+                                                        ) : 'Cita Genérica'}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs text-slate-600">
+                                                        ${Number(item.consultation_fee).toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs text-red-500">
+                                                        -${Number(item.room_rental_cost).toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs text-red-500 font-medium">
+                                                        -${Number(item.platform_commission).toLocaleString()}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-xs font-bold text-emerald-600">
+                                                        ${Number(item.doctor_payout).toLocaleString()}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            <div className="p-4 bg-amber-50 rounded-lg border border-amber-100 flex gap-3 items-start">
+                                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="text-xs text-amber-800 leading-relaxed">
+                                    <p className="font-bold mb-1">Nota legal:</p>
+                                    Este documento constituye un registro de liquidación de servicios profesionales. El pago neto corresponde al valor recaudado de los pacientes menos los gastos operativos pactados por uso de espacios y mantenimiento de la plataforma.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter>
+                        <Button onClick={() => setViewingPayoutDetail(null)}>Cerrar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Confirmation Dialog for Mass Payment */}
+            <Dialog open={showPayAllConfirm} onOpenChange={setShowPayAllConfirm}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-xl text-emerald-900">
+                            <DollarSign className="h-6 w-6 text-emerald-500" />
+                            ¿Procesar todos los pagos?
+                        </DialogTitle>
+                        <DialogDescription className="pt-2">
+                            Se marcarán como <strong>"Pagados"</strong> todos los honorarios pendientes de la semana para todos los especialistas.
+                            <div className="mt-3 text-slate-600">
+                                Asegúrate de haber realizado las transferencias bancarias correspondientes antes de confirmar en el sistema.
+                            </div>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="gap-2 mt-4">
+                        <Button variant="outline" onClick={() => setShowPayAllConfirm(false)}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleProcessAllPayouts}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                        >
+                            Confirmar Pago Masivo
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+        </div >
     );
 };

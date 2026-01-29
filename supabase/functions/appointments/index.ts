@@ -7,8 +7,8 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
 }
 
-// Horario de atención: 7:00 AM - 9:00 PM
-const WORKING_HOURS = { start: 7, end: 21 }
+// Horario de atención: 9:00 AM - 7:00 PM
+const WORKING_HOURS = { start: 9, end: 19 }
 const APPOINTMENT_DURATION_HOURS = 1
 const MIN_CANCELLATION_HOURS = 0.5
 
@@ -76,19 +76,21 @@ serve(async (req) => {
         .gte('start_time', startOfDay.toISOString())
         .lte('start_time', endOfDay.toISOString())
 
-      // Generar slots disponibles
+      // Generar slots disponibles (9 AM - 7 PM Hora Local -05:00)
       const slots: string[] = []
       const now = new Date()
 
       for (let hour = WORKING_HOURS.start; hour < WORKING_HOURS.end; hour++) {
-        const slotStart = new Date(date)
-        slotStart.setHours(hour, 0, 0, 0)
+        // Construimos la fecha manualmente para asegurar que sea la hora local correcta del centro
+        const hourStr = hour.toString().padStart(2, '0')
+        const isoString = `${date}T${hourStr}:00:00-05:00`
+        const slotStart = new Date(isoString)
 
         // No mostrar slots pasados
         if (slotStart <= now) continue
 
         const slotEnd = new Date(slotStart)
-        slotEnd.setHours(hour + APPOINTMENT_DURATION_HOURS)
+        slotEnd.setHours(slotEnd.getHours() + APPOINTMENT_DURATION_HOURS)
 
         // Verificar si el slot está ocupado
         const isOccupied = existingAppointments?.some(apt => {
@@ -135,14 +137,23 @@ serve(async (req) => {
       */
 
       const startDate = new Date(start_time)
-      const endDate = new Date(startDate)
-      endDate.setHours(endDate.getHours() + APPOINTMENT_DURATION_HOURS)
+      const endDate = new Date(startDate.getTime() + APPOINTMENT_DURATION_HOURS * 60 * 60 * 1000)
 
-      // 1. Validar horario de atención (7am - 9pm)
-      const hour = startDate.getHours()
-      if (hour < WORKING_HOURS.start || hour >= WORKING_HOURS.end) {
+      // Proper local hour parsing using Intl to avoid UTC/Offset confusion
+      // Colombia is UTC-5
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Bogota',
+        hour: 'numeric',
+        hour12: false
+      });
+
+      // Parse the formatted hour string (e.g., "16")
+      const localHour = parseInt(formatter.format(startDate));
+
+      // 1. Validar horario de atención (9am - 7pm)
+      if (localHour < WORKING_HOURS.start || localHour >= WORKING_HOURS.end) {
         return new Response(JSON.stringify({
-          error: `Horario fuera de atención. Horario: ${WORKING_HOURS.start}:00 - ${WORKING_HOURS.end}:00`
+          error: `Horario fuera de atención. Horario: ${WORKING_HOURS.start}:00 - ${WORKING_HOURS.end}:00 (Usted eligió: ${localHour}:00)`
         }), {
           status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
