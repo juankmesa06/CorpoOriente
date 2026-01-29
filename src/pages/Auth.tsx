@@ -206,7 +206,7 @@ export default function Auth() {
             </Link>
           </div>
 
-          <CardContent className="p-8 pb-6">
+          <CardContent className="p-6 sm:p-8 pb-6">
             <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-100/80 p-1.5 h-14 rounded-xl border border-slate-200/50">
                 <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-teal-700 font-bold transition-all text-slate-500">

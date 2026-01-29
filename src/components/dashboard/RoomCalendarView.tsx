@@ -409,24 +409,26 @@ export const RoomCalendarView = () => {
 
                     {/* Calendar */}
                     <Card className="border-none shadow-xl overflow-hidden">
-                        <CardContent className="p-6 bg-white">
-                            <FullCalendar
-                                plugins={[dayGridPlugin, interactionPlugin]}
-                                initialView="dayGridMonth"
-                                locale={esLocale}
-                                events={events}
-                                headerToolbar={{
-                                    left: 'prev,next today',
-                                    center: 'title',
-                                    right: 'dayGridMonth,dayGridWeek,dayGridDay'
-                                }}
-                                height="auto"
-                                editable={false}
-                                eventClick={(info) => {
-                                    toast.info(`Cita: ${info.event.title}`);
-                                }}
-                                nowIndicator={true}
-                            />
+                        <CardContent className="p-6 bg-white overflow-x-auto">
+                            <div className="min-w-[800px]">
+                                <FullCalendar
+                                    plugins={[dayGridPlugin, interactionPlugin]}
+                                    initialView="dayGridMonth"
+                                    locale={esLocale}
+                                    events={events}
+                                    headerToolbar={{
+                                        left: 'prev,next today',
+                                        center: 'title',
+                                        right: 'dayGridMonth,dayGridWeek,dayGridDay'
+                                    }}
+                                    height="auto"
+                                    editable={false}
+                                    eventClick={(info) => {
+                                        toast.info(`Cita: ${info.event.title}`);
+                                    }}
+                                    nowIndicator={true}
+                                />
+                            </div>
                         </CardContent>
                     </Card>
 

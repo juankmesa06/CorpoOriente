@@ -987,8 +987,8 @@ export const RoomManagement = () => {
                                 </div>
                             </div>
                         </CardHeader>
-                        <CardContent className="p-0">
-                            <Table>
+                        <CardContent className="p-0 overflow-x-auto">
+                            <Table className="min-w-[800px]">
                                 <TableHeader>
                                     <TableRow className="bg-slate-50/80 border-b border-slate-100">
                                         <TableHead className="font-bold text-slate-600 uppercase tracking-wider text-[11px]">Fecha / Hora</TableHead>
