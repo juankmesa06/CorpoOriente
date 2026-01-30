@@ -60,14 +60,14 @@ export const PatientProfileForm = () => {
                 if (mounted) {
                     setFormData({
                         full_name: profileData?.full_name || '',
-                        phone: profileData?.phone || '',
+                        phone: (profileData?.phone || '').replace(/^\+57/, ''),
                         avatar_url: profileData?.avatar_url || '',
 
                         date_of_birth: patientData?.date_of_birth || '',
                         gender: patientData?.gender || '',
                         blood_type: patientData?.blood_type || '',
                         emergency_contact_name: patientData?.emergency_contact_name || '',
-                        emergency_contact_phone: patientData?.emergency_contact_phone || '',
+                        emergency_contact_phone: (patientData?.emergency_contact_phone || '').replace(/^\+57/, ''),
                         insurance_provider: patientData?.insurance_provider || '',
                         insurance_number: patientData?.insurance_number || ''
                     });
@@ -129,7 +129,7 @@ export const PatientProfileForm = () => {
                 .upsert({
                     user_id: user.id,
                     full_name: formData.full_name,
-                    phone: formData.phone,
+                    phone: `+57${formData.phone}`,
                     avatar_url: formData.avatar_url,
                     email: user.email,
                     updated_at: new Date().toISOString()
@@ -146,7 +146,7 @@ export const PatientProfileForm = () => {
                     gender: formData.gender || null,
                     blood_type: formData.blood_type || null,
                     emergency_contact_name: formData.emergency_contact_name || null,
-                    emergency_contact_phone: formData.emergency_contact_phone || null,
+                    emergency_contact_phone: formData.emergency_contact_phone ? `+57${formData.emergency_contact_phone}` : null,
                     insurance_provider: formData.insurance_provider || null,
                     insurance_number: formData.insurance_number || null,
                     updated_at: new Date().toISOString()
@@ -243,13 +243,13 @@ export const PatientProfileForm = () => {
                             <div className="space-y-2">
                                 <Label htmlFor="phone" className="text-slate-600 font-semibold text-sm">Teléfono / Celular</Label>
                                 <div className="relative">
-                                    <Phone className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
                                     <Input
                                         id="phone"
-                                        className="pl-10 bg-slate-50 border-slate-200 focus:bg-white transition-colors h-11"
+                                        className="pl-12 bg-slate-50 border-slate-200 focus:bg-white transition-colors h-11"
                                         value={formData.phone}
-                                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                        placeholder="+57 300 123 4567"
+                                        onChange={e => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        placeholder="300 123 4567"
                                     />
                                 </div>
                             </div>
@@ -265,9 +265,18 @@ export const PatientProfileForm = () => {
                                         value={formData.date_of_birth}
                                         max={new Date().toISOString().split('T')[0]}
                                         min="1900-01-01"
-                                        onChange={e => {
-                                            const val = e.target.value;
-                                            // Validate year length to prevent 5+ digit years
+                                        onInvalid={(e) => {
+                                            const target = e.target as HTMLInputElement;
+                                            if (target.validity.rangeOverflow) {
+                                                target.setCustomValidity('La fecha de nacimiento no puede ser en el futuro.');
+                                                // Prevent default default browser bubble if needed, but usually setCustomValidity passes text to it.
+                                            }
+                                        }}
+                                        onInput={(e) => {
+                                            const target = e.target as HTMLInputElement;
+                                            target.setCustomValidity('');
+                                            // Existing logic
+                                            const val = target.value;
                                             if (val) {
                                                 const year = val.split('-')[0];
                                                 if (year.length > 4) return;
@@ -356,13 +365,16 @@ export const PatientProfileForm = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <Label htmlFor="emergencyPhone" className="text-slate-600 font-medium">Teléfono del Contacto</Label>
-                                    <Input
-                                        id="emergencyPhone"
-                                        className="bg-white border-slate-200 h-11"
-                                        value={formData.emergency_contact_phone}
-                                        onChange={e => setFormData({ ...formData, emergency_contact_phone: e.target.value })}
-                                        placeholder="Número de emergencia"
-                                    />
+                                    <div className="relative">
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
+                                        <Input
+                                            id="emergencyPhone"
+                                            className="pl-12 bg-white border-slate-200 h-11"
+                                            value={formData.emergency_contact_phone}
+                                            onChange={e => setFormData({ ...formData, emergency_contact_phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                            placeholder="300 123 4567"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -373,7 +385,7 @@ export const PatientProfileForm = () => {
                             type="submit"
                             disabled={saving}
                             size="lg"
-                            className="bg-teal-600 hover:bg-teal-700 text-white min-w-[200px] h-12 text-base shadow-lg shadow-teal-700/20 rounded-xl"
+                            variant="brand" className="min-w-[200px] h-12 rounded-xl"
                         >
                             {saving ? (
                                 <>

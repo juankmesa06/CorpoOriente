@@ -11,6 +11,9 @@ import Appointments from "./pages/Appointments";
 import MedicalRecord from "./pages/MedicalRecord";
 import Settings from "./pages/Settings";
 import Index from "./pages/Index";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+
 import NotFound from "./pages/NotFound";
 import PatientPayment from "./pages/PatientPayment";
 import ResetPassword from "./pages/ResetPassword";
@@ -26,6 +29,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { PublicRoute } from "@/components/auth/PublicRoute";
 import ScrollToTop from "@/components/ScrollToTop";
 import { SessionTimeout } from "@/components/auth/SessionTimeout";
+import { CookieConsent } from "@/components/CookieConsent";
 
 const AppRoutes = () => {
   const navigate = useNavigate();
@@ -43,6 +47,8 @@ const AppRoutes = () => {
 
   return (
     <Routes>
+      <Route path="/privacy" element={<Privacy />} />
+      <Route path="/terms" element={<Terms />} />
       <Route path="/" element={<Index />} />
       <Route
         path="/dashboard"
@@ -122,6 +128,7 @@ const App = () => (
         <AuthProvider>
           <ScrollToTop />
           <SessionTimeout />
+          <CookieConsent />
           <div className="flex flex-col min-h-screen">
             <div className="flex-1">
               <AppRoutes />

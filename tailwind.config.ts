@@ -14,6 +14,12 @@ export default {
     },
     extend: {
       colors: {
+        brand: {
+          DEFAULT: "hsl(var(--primary))",
+          hover: "hsl(173 80% 35%)",
+          light: "hsl(166 76% 97%)",
+          muted: "hsl(166 76% 97%)",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

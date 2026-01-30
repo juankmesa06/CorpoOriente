@@ -233,6 +233,7 @@ export default function Auth() {
                         value={loginEmail}
                         onChange={e => setLoginEmail(e.target.value)}
                         disabled={isSubmitting}
+                        autoComplete="off"
                         className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 transition-all bg-slate-50/50 focus:bg-white"
                       />
                     </div>
@@ -256,6 +257,7 @@ export default function Auth() {
                         value={loginPassword}
                         onChange={e => setLoginPassword(e.target.value)}
                         disabled={isSubmitting}
+                        autoComplete="new-password"
                         className="pl-11 pr-10 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 transition-all bg-slate-50/50 focus:bg-white"
                       />
                       <Button
@@ -325,6 +327,7 @@ export default function Auth() {
                         value={signupName}
                         onChange={e => setSignupName(e.target.value)}
                         disabled={isSubmitting}
+                        autoComplete="off"
                         className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 bg-slate-50/50"
                       />
                     </div>
@@ -346,6 +349,7 @@ export default function Auth() {
                         value={signupEmail}
                         onChange={e => setSignupEmail(e.target.value)}
                         disabled={isSubmitting}
+                        autoComplete="off"
                         className="pl-11 h-12 border-slate-200 rounded-xl focus:border-teal-500 focus:ring-teal-500 bg-slate-50/50"
                       />
                     </div>
@@ -368,6 +372,7 @@ export default function Auth() {
                           value={signupPassword}
                           onChange={e => setSignupPassword(e.target.value)}
                           disabled={isSubmitting}
+                          autoComplete="new-password"
                           className="pl-10 pr-10 h-11 border-slate-200 rounded-xl text-sm focus:border-teal-500 bg-slate-50/50"
                         />
                         <Button
@@ -395,6 +400,7 @@ export default function Auth() {
                           value={signupConfirm}
                           onChange={e => setSignupConfirm(e.target.value)}
                           disabled={isSubmitting}
+                          autoComplete="new-password"
                           className="pl-10 pr-10 h-11 border-slate-200 rounded-xl text-sm focus:border-teal-500 bg-slate-50/50"
                         />
                         <Button

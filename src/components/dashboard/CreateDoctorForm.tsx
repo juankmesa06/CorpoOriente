@@ -35,7 +35,7 @@ export const CreateDoctorForm = ({ onSuccess }: CreateDoctorFormProps) => {
                     full_name: formData.full_name,
                     specialty: formData.specialty,
                     license_number: formData.license_number || undefined,
-                    phone: formData.phone || undefined,
+                    phone: formData.phone ? `+57${formData.phone}` : undefined,
                     bio: formData.bio || undefined,
                     consultation_fee: formData.consultation_fee ? parseFloat(formData.consultation_fee) : undefined
                 }
@@ -147,14 +147,18 @@ export const CreateDoctorForm = ({ onSuccess }: CreateDoctorFormProps) => {
 
                             {/* Teléfono */}
                             <div className="space-y-2">
-                                <Label htmlFor="phone">Teléfono</Label>
-                                <Input
-                                    id="phone"
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    placeholder="+57 300 123 4567"
-                                />
+                                <Label htmlFor="phone">Teléfono / WhatsApp (+57)</Label>
+                                <div className="relative">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
+                                    <Input
+                                        id="phone"
+                                        type="tel"
+                                        value={formData.phone}
+                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        className="pl-12"
+                                        placeholder="300 123 4567"
+                                    />
+                                </div>
                             </div>
 
                             {/* Tarifa de consulta */}

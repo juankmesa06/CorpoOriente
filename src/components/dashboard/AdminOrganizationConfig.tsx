@@ -27,7 +27,7 @@ export const AdminOrganizationConfig = () => {
         name: 'Centro Psicoterapéutico de Oriente',
         description: 'Centro integral de salud mental y bienestar emocional. ¡Cuidamos de ti y los tuyos!',
         address: 'Calle 48 #62b 106, Rionegro, Antioquia',
-        phone: '+57 321 786 10 80',
+        phone: '3217861080',
         email: 'Hola@cpo.co',
         website: 'https://centropsicoterapeuticodeoriente.com',
         timezone: 'America/Bogota',
@@ -126,14 +126,18 @@ export const AdminOrganizationConfig = () => {
                             <div className="space-y-2">
                                 <Label htmlFor="phone" className="flex items-center gap-2">
                                     <Phone className="h-4 w-4 text-muted-foreground" />
-                                    Teléfono Principal
+                                    Teléfono Principal (+57)
                                 </Label>
-                                <Input
-                                    id="phone"
-                                    name="phone"
-                                    value={config.phone}
-                                    onChange={handleChange}
-                                />
+                                <div className="relative">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
+                                    <Input
+                                        id="phone"
+                                        name="phone"
+                                        value={config.phone}
+                                        onChange={(e) => setConfig({ ...config, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        className="pl-12"
+                                    />
+                                </div>
                             </div>
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="flex items-center gap-2">

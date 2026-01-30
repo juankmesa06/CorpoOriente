@@ -66,7 +66,7 @@ export function ProfileSetupModal() {
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .update({
-                        phone: phone,
+                        phone: `+57${phone}`,
                         // address: address // Uncomment if column exists
                     })
                     .eq('user_id', user.id);
@@ -120,13 +120,13 @@ export function ProfileSetupModal() {
                     <div className="space-y-2">
                         <Label htmlFor="phone">Teléfono / WhatsApp</Label>
                         <div className="relative">
-                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
                             <Input
                                 id="phone"
-                                placeholder="+57 300 123 4567"
-                                className="pl-9"
+                                placeholder="300 123 4567"
+                                className="pl-12"
                                 value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
+                                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
                                 required
                             />
                         </div>

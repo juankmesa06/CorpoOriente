@@ -39,7 +39,7 @@ export const ReceptionistProfile = () => {
                     setFormData({
                         full_name: data.full_name || '',
                         email: data.email || '',
-                        phone: data.phone || '',
+                        phone: (data.phone || '').replace(/^\+57/, ''),
                         avatar_url: data.avatar_url || ''
                     });
                 }
@@ -107,7 +107,7 @@ export const ReceptionistProfile = () => {
                 .from('profiles')
                 .update({
                     full_name: formData.full_name,
-                    phone: formData.phone,
+                    phone: `+57${formData.phone}`,
                     avatar_url: formData.avatar_url,
                     updated_at: new Date().toISOString(),
                 })
@@ -210,13 +210,13 @@ export const ReceptionistProfile = () => {
                         <div className="space-y-2">
                             <Label htmlFor="phone">Teléfono / Celular</Label>
                             <div className="relative">
-                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
                                 <Input
                                     id="phone"
-                                    placeholder="+57..."
-                                    className="pl-9"
+                                    placeholder="300 123 4567"
+                                    className="pl-12"
                                     value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
                                 />
                             </div>
                         </div>

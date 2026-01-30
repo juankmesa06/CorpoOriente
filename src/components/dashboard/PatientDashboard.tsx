@@ -1,7 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { PlusCircle, CalendarDays, Users, Building2, Heart, BookOpen, Coffee, Sun, ArrowRight, Smile, X, Activity, Clock, Phone, Stethoscope, Video } from 'lucide-react';
+import { PlusCircle, CalendarDays, Users, Building2, Heart, BookOpen, Coffee, Sun, ArrowRight, Smile, X, Activity, Clock, Phone, Stethoscope, Video, MapPin, Mail } from 'lucide-react';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious, type CarouselApi } from '@/components/ui/carousel';
 import { Link, useNavigate } from 'react-router-dom';
 import { RoomRentalBooking } from '@/components/rental/RoomRentalBooking';
 import { useState, useEffect } from 'react';
@@ -13,6 +14,27 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppointments } from '@/hooks/useAppointments';
 import { PatientPayments } from './PatientPayments';
 
+const wellnessTips = [
+    {
+        icon: <Sun className="h-5 w-5 text-yellow-300" />,
+        title: "Tip de Bienestar",
+        quote: "La salud mental no es un destino, es un proceso. Tómate un momento cada día para respirar.",
+        color: "bg-indigo-600"
+    },
+    {
+        icon: <Coffee className="h-5 w-5 text-orange-300" />,
+        title: "Pausa Activa",
+        quote: "Regálate 5 minutos de descanso por cada hora de trabajo. Tu cuerpo y mente te lo agradecerán.",
+        color: "bg-emerald-600"
+    },
+    {
+        icon: <Heart className="h-5 w-5 text-pink-300" />,
+        title: "Autocuidado",
+        quote: "Beber suficiente agua es el acto de amor propio más simple y efectivo. ¡Hidrátate!",
+        color: "bg-blue-600"
+    }
+];
+
 const PatientDashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -22,6 +44,19 @@ const PatientDashboard = () => {
     const [upcomingRentals, setUpcomingRentals] = useState<any[]>([]);
     const [patientName, setPatientName] = useState<string>('');
     const { cancelAppointment, loading: cancelLoading } = useAppointments();
+    const [api, setApi] = useState<CarouselApi>();
+
+    useEffect(() => {
+        if (!api) {
+            return;
+        }
+
+        const intervalId = setInterval(() => {
+            api.scrollNext();
+        }, 5000);
+
+        return () => clearInterval(intervalId);
+    }, [api]);
 
     const fetchDashboardData = async () => {
         if (!user) return;
@@ -184,11 +219,13 @@ const PatientDashboard = () => {
                                             Próxima Cita
                                         </div>
                                         <div>
-                                            <h2 className="text-4xl md:text-5xl font-bold mb-2 tracking-tight">
-                                                {format(new Date(upcomingAppointments[0].start_time), 'EEEE d', { locale: es })}
+                                            {/* Main Title: Room Name */}
+                                            <h2 className="text-3xl md:text-5xl font-bold mb-2 tracking-tight leading-none">
+                                                {upcomingAppointments[0].is_virtual ? 'Google Meet' : (upcomingAppointments[0].roomName || 'Consultorio')}
                                             </h2>
-                                            <p className="text-teal-50 text-2xl font-light opacity-90">
-                                                de {format(new Date(upcomingAppointments[0].start_time), 'MMMM', { locale: es })} — {format(new Date(upcomingAppointments[0].start_time), 'h:mm a')}
+                                            {/* Subtitle: Date & Time */}
+                                            <p className="text-teal-50 text-xl md:text-2xl font-light opacity-90 capitalize">
+                                                {format(new Date(upcomingAppointments[0].start_time), "EEEE d 'de' MMMM — h:mm a", { locale: es })}
                                             </p>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4 text-sm font-medium bg-black/10 p-4 rounded-xl w-fit backdrop-blur-sm border border-white/10">
@@ -204,11 +241,12 @@ const PatientDashboard = () => {
                                             <div className="hidden sm:block w-px h-8 bg-white/20" />
                                             <div className="flex items-center gap-3">
                                                 <div className="p-2 bg-white/20 rounded-full">
-                                                    {upcomingAppointments[0].is_virtual ? <Video className="h-5 w-5 text-white" /> : <Building2 className="h-5 w-5 text-white" />}
+                                                    <CalendarDays className="h-5 w-5 text-white" />
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="text-xs text-white/70 uppercase tracking-wider">Ubicación</span>
-                                                    <span className="font-bold whitespace-nowrap">{upcomingAppointments[0].is_virtual ? 'Google Meet' : (upcomingAppointments[0].roomName || 'Consultorio')}</span>
+                                                    {/* Footer Pill: Date (since Room is now Title) */}
+                                                    <span className="text-xs text-white/70 uppercase tracking-wider">Fecha</span>
+                                                    <span className="font-bold whitespace-nowrap capitalize">{format(new Date(upcomingAppointments[0].start_time), "MMM d, yyyy", { locale: es })}</span>
                                                 </div>
                                             </div>
                                         </div>
@@ -291,21 +329,28 @@ const PatientDashboard = () => {
                                         </div>
                                         <span className="text-sm font-bold text-slate-600 uppercase tracking-wider">Siguiente Cita</span>
                                     </div>
-                                    <span className="text-xs font-bold text-slate-400">
-                                        {format(new Date(upcomingAppointments[1].start_time), 'd MMM', { locale: es })}
-                                    </span>
+                                    <div className="px-2 py-0.5 bg-teal-50 text-teal-700 rounded text-[10px] font-bold border border-teal-200">
+                                        CONFIRMADO
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="pb-5">
-                                <h4 className="font-bold text-slate-800 text-lg mb-1">
-                                    {format(new Date(upcomingAppointments[1].start_time), 'EEEE d', { locale: es })}
+                                <h4 className="font-bold text-slate-800 text-lg mb-1 leading-tight">
+                                    {upcomingAppointments[1].is_virtual ? 'Google Meet' : (upcomingAppointments[1].roomName || 'Consultorio')}
                                 </h4>
-                                <p className="text-teal-600 font-medium mb-3">
-                                    {format(new Date(upcomingAppointments[1].start_time), 'h:mm a')}
-                                </p>
-                                <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50 p-2 rounded-lg truncate">
-                                    <Stethoscope className="h-3.5 w-3.5 flex-shrink-0" />
-                                    <span className="truncate">Dr/a. {upcomingAppointments[1].doctor_profiles?.profiles?.full_name || 'Asignado'}</span>
+                                <div className="space-y-2 mt-3 text-left">
+                                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                                        <CalendarDays className="h-4 w-4 text-teal-400 flex-shrink-0" />
+                                        <span className="capitalize">{format(new Date(upcomingAppointments[1].start_time), "EEEE d MMMM", { locale: es })}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-slate-500">
+                                        <Clock className="h-4 w-4 text-teal-400 flex-shrink-0" />
+                                        <span className="capitalize">{format(new Date(upcomingAppointments[1].start_time), 'h:mm a')}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-sm text-slate-500 mt-2 bg-slate-50 p-2 rounded-lg">
+                                        <Stethoscope className="h-3.5 w-3.5 flex-shrink-0 text-teal-500" />
+                                        <span className="truncate">Dr/a. {upcomingAppointments[1].doctor_profiles?.profiles?.full_name || 'Asignado'}</span>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -433,35 +478,73 @@ const PatientDashboard = () => {
                 <PatientPayments />
             </div>
 
+
             {/* 5. Wellness & Help */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Card className="border-none shadow-sm bg-indigo-600 text-white overflow-hidden relative">
-                    <div className="absolute right-0 bottom-0 opacity-10">
-                        <Heart className="h-32 w-32 -mb-8 -mr-8" />
-                    </div>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <Sun className="h-5 w-5 text-yellow-300" />
-                            Tip de Bienestar
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent className="relative z-10">
-                        <blockquote className="text-lg font-medium italic mb-4">
-                            "La salud mental no es un destino, es un proceso. Tómate un momento cada día para respirar."
-                        </blockquote>
-                        <Button variant="secondary" size="sm" className="text-indigo-700 font-bold">
-                            Leer más consejos
-                        </Button>
-                    </CardContent>
+
+                {/* Wellness Carousel */}
+                <Card className="border-none shadow-sm overflow-hidden relative p-0 bg-transparent">
+                    <Carousel className="w-full h-full" opts={{ loop: true }} setApi={setApi}>
+                        <CarouselContent>
+                            {wellnessTips.map((tip, index) => (
+                                <CarouselItem key={index}>
+                                    <div className={`${tip.color} text-white p-6 h-full min-h-[220px] flex flex-col justify-center relative overflow-hidden rounded-xl`}>
+                                        <div className="absolute right-0 bottom-0 opacity-10">
+                                            <Heart className="h-32 w-32 -mb-8 -mr-8" />
+                                        </div>
+
+                                        <div className="relative z-10 text-center">
+                                            <div className="flex items-center justify-center gap-2 mb-4 font-bold text-lg">
+                                                {tip.icon}
+                                                {tip.title}
+                                            </div>
+                                            <blockquote className="text-xl font-medium italic mb-2 leading-relaxed opacity-95">
+                                                "{tip.quote}"
+                                            </blockquote>
+                                        </div>
+                                    </div>
+                                </CarouselItem>
+                            ))}
+                        </CarouselContent>
+                        <div className="hidden md:block">
+                            <CarouselPrevious className="left-2 bg-white/20 border-none hover:bg-white/40 text-white" />
+                            <CarouselNext className="right-2 bg-white/20 border-none hover:bg-white/40 text-white" />
+                        </div>
+                    </Carousel>
                 </Card>
 
+                {/* Contact & Help */}
                 <Card className="border-none shadow-sm bg-gradient-to-br from-white to-slate-50 relative">
-                    <CardHeader>
-                        <CardTitle className="text-slate-800 text-lg">¿Necesitas Ayuda?</CardTitle>
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-slate-800 text-lg flex items-center gap-2">
+                            <Building2 className="h-5 w-5 text-teal-600" />
+                            Contacto y Ubicación
+                        </CardTitle>
                         <CardDescription>Estamos aquí para escucharte.</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <div className="flex items-center gap-4 text-sm text-slate-600 mb-4 text-left">
+                    <CardContent className="space-y-4">
+                        <div className="flex items-start gap-4 text-sm text-slate-600">
+                            <div className="bg-teal-100 p-2 rounded-full flex-shrink-0 mt-1">
+                                <MapPin className="h-4 w-4 text-teal-700" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-800">Dirección Principal</p>
+                                <p>Av. 3E # 4-56, Barrio La Ceiba</p>
+                                <p>Cúcuta, Norte de Santander</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-sm text-slate-600">
+                            <div className="bg-indigo-100 p-2 rounded-full flex-shrink-0">
+                                <Mail className="h-4 w-4 text-indigo-700" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-slate-800">Correo Electrónico</p>
+                                <p>contacto@corpooriente.com</p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-4 text-sm text-slate-600">
                             <div className="bg-green-100 p-2 rounded-full flex-shrink-0">
                                 <Phone className="h-4 w-4 text-green-700" />
                             </div>
@@ -470,8 +553,13 @@ const PatientDashboard = () => {
                                 <p>+57 300 123 4567</p>
                             </div>
                         </div>
-                        <Button variant="outline" className="w-full justify-start text-slate-600" onClick={() => window.location.href = 'mailto:contacto@corpooriente.com'}>
-                            Contactar Soporte
+
+                        <Button
+                            className="w-full bg-slate-900 text-white hover:bg-slate-800 shadow-md transition-all active:scale-95"
+                            onClick={() => window.location.href = 'tel:+573001234567'}
+                        >
+                            <Phone className="mr-2 h-4 w-4" />
+                            Llamar a Soporte
                         </Button>
                     </CardContent>
                 </Card>

@@ -61,8 +61,8 @@ const Settings = () => {
                             <SettingsIcon className="h-6 w-6 text-white" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Mi Perfil</h1>
-                            <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Configuración y Preferencias</p>
+                            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Mi Perfil</h1>
+                            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em]">Configuración y Preferencias</p>
                         </div>
                     </div>
                 </div>
@@ -104,7 +104,7 @@ const Settings = () => {
                                         return (
                                             <Badge
                                                 key={role}
-                                                className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-[9px] font-black uppercase tracking-widest py-1 backdrop-blur-sm shadow-none"
+                                                className="bg-white/10 hover:bg-white/20 text-white border-white/20 text-[9px] font-bold uppercase tracking-widest py-1 backdrop-blur-sm shadow-none"
                                             >
                                                 {badge.label}
                                             </Badge>
@@ -122,7 +122,7 @@ const Settings = () => {
                                             </div>
                                             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Miembro Desde</span>
                                         </div>
-                                        <span className="text-xs font-bold text-slate-800">
+                                        <span className="text-xs font-semibold text-slate-800">
                                             {user?.created_at ? new Date(user.created_at).getFullYear() : '2024'}
                                         </span>
                                     </div>
@@ -134,7 +134,7 @@ const Settings = () => {
                                             </div>
                                             <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Estado</span>
                                         </div>
-                                        <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[9px] font-black shadow-none">VERIFICADO</Badge>
+                                        <Badge className="bg-emerald-50 text-emerald-600 border-emerald-100 text-[9px] font-bold shadow-none">VERIFICADO</Badge>
                                     </div>
                                 </div>
 
@@ -157,7 +157,7 @@ const Settings = () => {
                                 {/* Sección Global para todos los empleados */}
                                 <Card className="border-0 shadow-2xl shadow-slate-200/50 rounded-[2.5rem] overflow-hidden bg-white">
                                     <CardHeader className="p-8 pb-4">
-                                        <CardTitle className="text-lg font-black text-slate-800 flex items-center gap-3 group">
+                                        <CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-3 group">
                                             <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center group-hover:bg-slate-900 transition-colors">
                                                 <User className="h-4 w-4 group-hover:text-white" />
                                             </div>
@@ -167,14 +167,14 @@ const Settings = () => {
                                     <CardContent className="p-8 pt-0">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                             <div className="p-5 rounded-2xl bg-[#FBFDFF] border border-slate-100 hover:border-teal-200 transition-all shadow-sm">
-                                                <p className="text-[10px] font-black text-teal-600 uppercase tracking-widest mb-1">Nombre Completo</p>
-                                                <p className="text-slate-800 font-bold text-lg">
+                                                <p className="text-[10px] font-bold text-teal-600 uppercase tracking-widest mb-1">Nombre Completo</p>
+                                                <p className="text-slate-800 font-semibold text-lg">
                                                     {profileData?.full_name || user?.user_metadata?.full_name || 'No especificado'}
                                                 </p>
                                             </div>
                                             <div className="p-5 rounded-2xl bg-[#FBFDFF] border border-slate-100 hover:border-blue-200 transition-all shadow-sm">
-                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Correo Electrónico</p>
-                                                <p className="text-slate-800 font-bold text-lg">{user?.email}</p>
+                                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-1">Correo Electrónico</p>
+                                                <p className="text-slate-800 font-semibold text-lg">{user?.email}</p>
                                             </div>
                                         </div>
 

@@ -287,7 +287,7 @@ export const DoctorAffiliationManager = () => {
                         </Select>
                         <Button
                             onClick={() => setCreateDialogOpen(true)}
-                            className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white"
+                            variant="brand"
                         >
                             <UserPlus className="h-4 w-4 mr-2" />
                             Crear médico

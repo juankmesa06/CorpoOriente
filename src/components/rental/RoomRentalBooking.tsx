@@ -36,7 +36,7 @@ interface Room {
     room_type: 'consultation' | 'event_hall' | 'virtual' | 'event' | 'physical';
     capacity: number;
     is_active: boolean;
-    hourly_rate: number;
+    price_per_hour: number;
 }
 
 interface TimeSlot {
@@ -209,6 +209,11 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
         setCheckingAvailability(false);
     };
 
+    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+        setFormData({ ...formData, renter_phone: value });
+    };
+
     const handlePreSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -255,12 +260,12 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
             user_id: user?.id || null,
             renter_name: formData.renter_name,
             renter_email: formData.renter_email,
-            renter_phone: formData.renter_phone,
+            renter_phone: `+57${formData.renter_phone}`,
             start_time: startTime.toISOString(),
             end_time: endTime.toISOString(),
             purpose: formData.purpose,
-            hourly_rate: selectedRoom!.hourly_rate || 50000,
-            total_price: (selectedRoom!.hourly_rate || 50000) * formData.duration_hours,
+            hourly_rate: selectedRoom!.price_per_hour || 50000,
+            total_price: (selectedRoom!.price_per_hour || 50000) * formData.duration_hours,
             status: 'confirmed', // Confirmado porque ya pagó
             appointment_id: appointment?.id || null // Link to appointment
         };
@@ -353,7 +358,7 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
     };
 
     if (showPayment && selectedRoom) {
-        const total = (selectedRoom.hourly_rate || 50000) * formData.duration_hours;
+        const total = (selectedRoom.price_per_hour || 50000) * formData.duration_hours;
 
         return (
             <Card className="border-none shadow-lg overflow-hidden">
@@ -384,7 +389,7 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
                                 </div>
                                 <div className="flex justify-between items-center text-slate-700">
                                     <span>Tarifa</span>
-                                    <span className="font-medium">{formatCOP(selectedRoom.hourly_rate)} / hora</span>
+                                    <span className="font-medium">{formatCOP(selectedRoom.price_per_hour || 50000)} / hora</span>
                                 </div>
                                 <div className="h-px bg-slate-200 my-2" />
                                 <div className="flex justify-between items-center text-lg font-bold text-teal-700">
@@ -473,7 +478,7 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
                                         <span>Cap: {room.capacity}</span>
                                     </div>
                                     <span className="font-bold text-teal-600 bg-teal-50 px-2 py-1 rounded-lg text-sm">
-                                        {formatCOP(room.hourly_rate || 50000)}/h
+                                        {formatCOP(room.price_per_hour || 50000)}/h
                                     </span>
                                 </div>
                                 {selectedRoom?.id === room.id && (
@@ -627,13 +632,19 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-slate-600 text-xs uppercase tracking-wider font-bold">Teléfono</Label>
-                                    <Input
-                                        type="tel"
-                                        value={formData.renter_phone}
-                                        onChange={(e) => setFormData({ ...formData, renter_phone: e.target.value })}
-                                        className="bg-slate-50 border-slate-200 focus:bg-white transition-colors h-11"
-                                    />
+                                    <Label className="text-slate-600 text-xs uppercase tracking-wider font-bold">Teléfono (+57)</Label>
+                                    <div className="relative">
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">
+                                            +57
+                                        </div>
+                                        <Input
+                                            type="tel"
+                                            value={formData.renter_phone}
+                                            onChange={handlePhoneChange}
+                                            className="bg-slate-50 border-slate-200 focus:bg-white transition-colors h-11 pl-12"
+                                            placeholder="3000000000"
+                                        />
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     <Label className="text-slate-600 text-xs uppercase tracking-wider font-bold">Propósito</Label>
@@ -655,7 +666,7 @@ export const RoomRentalBooking = ({ appointment, onSuccess }: RoomRentalBookingP
                             className="bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white shadow-lg shadow-teal-500/25 rounded-full px-8 h-12 text-base font-semibold transition-transform hover:scale-105"
                             disabled={loading}
                         >
-                            Continuar al Pago ({formatCOP((selectedRoom.hourly_rate || 50000) * formData.duration_hours)})
+                            Continuar al Pago ({formatCOP((selectedRoom.price_per_hour || 50000) * formData.duration_hours)})
                         </Button>
                     </div>
                 </form>

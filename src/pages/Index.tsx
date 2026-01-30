@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -19,7 +19,8 @@ import {
   Shield,
   Clock,
   Award,
-  CalendarCheck
+  CalendarCheck,
+  Stethoscope
 } from "lucide-react";
 import { PublicNavbar } from "@/components/PublicNavbar";
 import {
@@ -28,6 +29,59 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+
+// CountUp Component
+const CountUp = ({ end, duration = 2000, prefix = "", suffix = "" }: { end: number, duration?: number, prefix?: string, suffix?: string }) => {
+  const [count, setCount] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible) return;
+
+    let startTime: number | null = null;
+    const animate = (timestamp: number) => {
+      if (!startTime) startTime = timestamp;
+      const progress = timestamp - startTime;
+      const percentage = Math.min(progress / duration, 1);
+
+      // Easing function (easeOutExpo)
+      const easeOut = (x: number): number => {
+        return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+      };
+
+      setCount(Math.floor(easeOut(percentage) * end));
+
+      if (progress < duration) {
+        requestAnimationFrame(animate);
+      } else {
+        setCount(end); // Ensure final value is exact
+      }
+    };
+
+    requestAnimationFrame(animate);
+  }, [isVisible, end, duration]);
+
+  return <span ref={ref}>{prefix}{count}{suffix}</span>;
+};
 
 const Index = () => {
   const { user } = useAuth();
@@ -86,10 +140,10 @@ const Index = () => {
   ];
 
   const stats = [
-    { number: "+10", label: "Años de Trayectoria", icon: Award },
-    { number: "+500", label: "Pacientes Atendidos", icon: Users },
-    { number: "15", label: "Especialistas", icon: Heart },
-    { number: "98%", label: "Satisfacción", icon: Star }
+    { value: 10, prefix: "+", label: "Años de Trayectoria", icon: Award },
+    { value: 500, prefix: "+", label: "Pacientes Atendidos", icon: Users },
+    { value: 15, prefix: "", label: "Especialistas", icon: Heart },
+    { value: 98, suffix: "%", label: "Satisfacción", icon: Star }
   ];
 
   return (
@@ -98,7 +152,7 @@ const Index = () => {
 
       <main className="flex-grow pt-20">
         {/* Hero Section */}
-        <section className="relative px-4 py-20 lg:py-32 overflow-hidden bg-white">
+        <section className="relative px-4 py-8 lg:py-12 overflow-hidden bg-white">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-teal-50 via-white to-white opacity-70"></div>
 
           <div className="container relative z-10 mx-auto max-w-7xl">
@@ -181,7 +235,9 @@ const Index = () => {
               {stats.map((stat, i) => (
                 <div key={i} className="text-center group hover:scale-105 transition-transform duration-300">
                   <stat.icon className="h-8 w-8 mx-auto mb-3 text-teal-300 opacity-80 group-hover:opacity-100" />
-                  <p className="text-4xl lg:text-5xl font-bold mb-1 tracking-tight">{stat.number}</p>
+                  <p className="text-4xl lg:text-5xl font-bold mb-1 tracking-tight">
+                    <CountUp end={stat.value} prefix={stat.prefix} suffix={stat.suffix} />
+                  </p>
                   <p className="text-teal-200 text-sm font-medium uppercase tracking-wider">{stat.label}</p>
                 </div>
               ))}
@@ -217,13 +273,7 @@ const Index = () => {
               ))}
             </div>
 
-            <div className="mt-16 text-center">
-              <Link to="/auth?mode=register">
-                <Button size="lg" variant="outline" className="rounded-full px-8 border-teal-200 text-teal-700 hover:bg-teal-50 hover:border-teal-300">
-                  Ver Todos los Servicios <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </Link>
-            </div>
+
           </div>
         </section>
 
@@ -244,7 +294,7 @@ const Index = () => {
                 <div className="absolute -bottom-10 -right-10 w-40 h-40 bg-teal-50 rounded-full blur-3xl -z-10"></div>
               </div>
 
-              <div className="lg:w-1/2 space-y-8">
+              <div className="lg:w-1/2 space-y-8 text-center lg:text-left">
                 <div>
                   <span className="text-teal-600 font-semibold tracking-wider uppercase text-sm">Sobre Nosotros</span>
                   <h2 className="text-3xl lg:text-4xl font-bold mt-2 mb-6 text-slate-900 leading-tight">
@@ -265,7 +315,7 @@ const Index = () => {
                     "Equipo en constante formación",
                     "Tecnología para citas online"
                   ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-3">
+                    <div key={i} className="flex items-center justify-center lg:justify-start gap-3">
                       <div className="h-2 w-2 rounded-full bg-teal-500"></div>
                       <span className="font-medium text-slate-700">{item}</span>
                     </div>
@@ -302,7 +352,7 @@ const Index = () => {
                       Reservar Espacio
                     </Button>
                   </Link>
-                  <Button variant="outline" className="rounded-full h-12 px-8 border-slate-600 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-500">
+                  <Button variant="outline" className="bg-transparent rounded-full h-12 px-8 border-slate-600 text-slate-200 hover:text-white hover:bg-slate-800 hover:border-slate-400 transition-all">
                     Ver Galería
                   </Button>
                 </div>
@@ -338,64 +388,138 @@ const Index = () => {
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="py-24 bg-white relative overflow-hidden">
-          {/* Background decoration */}
-          <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-            <div className="absolute -top-20 -right-20 w-96 h-96 bg-teal-50 rounded-full blur-3xl opacity-50"></div>
-            <div className="absolute top-40 -left-20 w-72 h-72 bg-emerald-50 rounded-full blur-3xl opacity-50"></div>
+        {/* Professional Recruitment Section */}
+        <section className="py-20 bg-white relative overflow-hidden">
+          {/* Background decorative elements */}
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-teal-50/50 rounded-full blur-3xl -z-10 translate-x-1/2 -translate-y-1/2"></div>
+          <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-emerald-50/50 rounded-full blur-3xl -z-10 -translate-x-1/2 translate-y-1/2"></div>
+
+          <div className="container mx-auto px-4 max-w-5xl relative z-10">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-10">
+              <div className="md:w-3/5 space-y-6">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-50 border border-teal-100 text-teal-700 text-sm font-semibold">
+                  <Stethoscope className="h-4 w-4" />
+                  <span>Únete a Nuestro Equipo</span>
+                </div>
+                <h2 className="text-3xl md:text-4xl font-bold leading-tight text-slate-900">
+                  ¿Eres especialista en <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-emerald-600">Salud Mental?</span>
+                </h2>
+                <p className="text-slate-600 text-lg leading-relaxed">
+                  Estamos buscando profesionales apasionados por el bienestar emocional. Si eres psiquiatra, psicólogo o terapeuta, nos encantaría conocerte y explorar cómo podemos trabajar juntos.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-4 pt-2">
+                  <a
+                    href="https://wa.me/573217861080?text=Hola,%20soy%20especialista%20en%20salud%20mental%20y%20me%20gustaría%20formar%20parte%20de%20su%20equipo."
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-block"
+                  >
+                    <Button size="lg" className="w-full sm:w-auto bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-full h-14 px-8 shadow-lg shadow-teal-200 hover:shadow-teal-300 transition-all transform hover:-translate-y-1">
+                      <MessageCircle className="mr-2 h-5 w-5" />
+                      Contactar Administración
+                    </Button>
+                  </a>
+                </div>
+              </div>
+
+              <div className="md:w-2/5 flex justify-center">
+                <div className="relative">
+                  <div className="absolute inset-0 bg-teal-500 rounded-2xl blur opacity-10 transform rotate-6 scale-105"></div>
+                  <div className="relative bg-white/90 backdrop-blur-sm border border-slate-100 p-6 rounded-2xl shadow-xl shadow-slate-200/50 max-w-xs">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="h-12 w-12 rounded-full bg-teal-50 flex items-center justify-center text-teal-600">
+                        <Users className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900">Comunidad Médica</h4>
+                        <p className="text-xs text-slate-500">Crecimiento profesional</p>
+                      </div>
+                    </div>
+                    <ul className="space-y-3 text-sm text-slate-600">
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-teal-500" />
+                        <span>Espacios consultorios modernos</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-teal-500" />
+                        <span>Gestión de agenda digital</span>
+                      </li>
+                      <li className="flex items-center gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-teal-500" />
+                        <span>Red de derivación de pacientes</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
+        </section>
+
+        {/* CTA Section */}
+        <section id="contact" className="py-24 relative overflow-hidden bg-gradient-to-br from-teal-900 to-slate-900">
+          {/* Background decoration */}
+          <div className="absolute inset-0 bg-gradient-to-br from-teal-900/50 via-slate-900/50 to-emerald-900/50 -z-20"></div>
+          <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-teal-500/10 rounded-full blur-3xl -z-10 translate-x-1/3 -translate-y-1/3"></div>
+          <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-3xl -z-10 -translate-x-1/3 translate-y-1/3"></div>
 
           <div className="container relative z-10 mx-auto px-4 text-center max-w-4xl">
-            <h2 className="text-4xl lg:text-5xl font-bold text-slate-900 mb-6 leading-tight">
-              Comienza hoy tu camino hacia el <span className="text-teal-600">bienestar</span>
+            <span className="inline-block py-1 px-3 rounded-full bg-teal-500/20 text-teal-300 text-sm font-semibold mb-6 tracking-wide uppercase border border-teal-500/30">
+              Agenda tu Cita
+            </span>
+            <h2 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight tracking-tight">
+              Comienza hoy tu camino hacia el <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-400">bienestar total</span>
             </h2>
-            <p className="text-xl text-slate-600 mb-10 max-w-2xl mx-auto">
-              No estás solo. Nuestro equipo de profesionales está listo para escucharte y guiarte. Agenda tu cita de forma rápida y segura.
+            <p className="text-xl text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed">
+              No estás solo. Nuestro equipo de profesionales está listo para escucharte y guiarte. Da el primer paso hacia una vida más plena.
             </p>
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <Link to="/auth?mode=register">
-                <Button size="lg" className="w-full sm:w-auto rounded-full h-16 px-10 text-xl font-bold bg-teal-600 hover:bg-teal-700 shadow-xl shadow-teal-600/20 hover:shadow-teal-600/30 transition-all transform hover:-translate-y-1">
+                <Button size="lg" className="w-full sm:w-auto rounded-full h-16 px-10 text-xl font-bold bg-teal-500 hover:bg-teal-600 shadow-xl shadow-teal-900/40 hover:shadow-teal-500/20 text-white transition-all transform hover:-translate-y-1">
                   Reservar Cita Ahora
                 </Button>
               </Link>
             </div>
-            <p className="mt-6 text-sm text-slate-500">
-              * Registro gratuito y confidencial.
+            <p className="mt-6 text-sm text-slate-400 flex items-center justify-center gap-2">
+              <Shield className="h-4 w-4" /> Registro gratuito y 100% confidencial
             </p>
           </div>
         </section>
 
-        {/* Contact Strip */}
-        <section id="contact" className="py-12 bg-slate-50 border-t border-slate-200">
-          <div className="container mx-auto px-4">
-            <div className="flex flex-wrap justify-center gap-8 md:gap-16">
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-white shadow-sm text-teal-600">
-                  <MapPin className="h-6 w-6" />
+        {/* Contact Grid Section - Moving "Visítanos/Llámanos/Horario" here with better design */}
+        <section className="py-16 bg-slate-50">
+          <div className="container mx-auto px-4 max-w-6xl">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {/* Location Card */}
+              <div className="group p-8 rounded-3xl bg-white border border-slate-200 shadow-md hover:border-teal-400 hover:shadow-xl hover:shadow-teal-900/10 transition-all duration-300 text-center transform hover:-translate-y-1">
+                <div className="h-14 w-14 mx-auto rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-teal-600 group-hover:text-white transition-all duration-300">
+                  <MapPin className="h-7 w-7" />
                 </div>
-                <div>
-                  <p className="font-bold text-slate-900">Visítanos</p>
-                  <p className="text-sm text-slate-600">Edif. Salud, Piso 3</p>
-                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Visítanos</h3>
+                <p className="text-slate-600">Calle 48 #62b 106</p>
+                <p className="text-slate-500 text-sm">Rionegro, Antioquia</p>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-white shadow-sm text-teal-600">
-                  <Phone className="h-6 w-6" />
+
+              {/* Phone Card */}
+              <div className="group p-8 rounded-3xl bg-white border border-slate-200 shadow-md hover:border-teal-400 hover:shadow-xl hover:shadow-teal-900/10 transition-all duration-300 text-center transform hover:-translate-y-1">
+                <div className="h-14 w-14 mx-auto rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-teal-600 group-hover:text-white transition-all duration-300">
+                  <Phone className="h-7 w-7" />
                 </div>
-                <div>
-                  <p className="font-bold text-slate-900">Llámanos</p>
-                  <p className="text-sm text-slate-600">+58 (281) 234-5678</p>
-                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Llámanos</h3>
+                <p className="text-slate-600 mb-1">+57 321 786 10 80</p>
+                <a href="tel:+573217861080" className="text-teal-600 font-medium hover:underline text-sm">
+                  Llamar ahora
+                </a>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="p-3 rounded-full bg-white shadow-sm text-teal-600">
-                  <Clock className="h-6 w-6" />
+
+              {/* Hours Card */}
+              <div className="group p-8 rounded-3xl bg-white border border-slate-200 shadow-md hover:border-teal-400 hover:shadow-xl hover:shadow-teal-900/10 transition-all duration-300 text-center transform hover:-translate-y-1">
+                <div className="h-14 w-14 mx-auto rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-6 group-hover:scale-110 group-hover:bg-teal-600 group-hover:text-white transition-all duration-300">
+                  <Clock className="h-7 w-7" />
                 </div>
-                <div>
-                  <p className="font-bold text-slate-900">Horario</p>
-                  <p className="text-sm text-slate-600">Lun-Vie: 8am - 7pm</p>
-                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-2">Horario</h3>
+                <p className="text-slate-600">Lunes a Viernes</p>
+                <p className="text-teal-600 font-medium">8:00 AM - 7:00 PM</p>
               </div>
             </div>
           </div>

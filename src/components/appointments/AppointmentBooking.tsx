@@ -20,6 +20,7 @@ interface AppointmentBookingProps {
   consultationFee?: number | null;
   specialty?: string;
   university?: string | null;
+  bio?: string | null;
   onSuccess?: () => void;
 }
 
@@ -31,6 +32,7 @@ export const AppointmentBooking = ({
   consultationFee,
   specialty,
   university,
+  bio,
   onSuccess
 }: AppointmentBookingProps) => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
@@ -115,7 +117,7 @@ export const AppointmentBooking = ({
               <CalendarDays className="h-10 w-10 text-white" />
             )}
           </div>
-          <div>
+          <div className="flex-1">
             <CardTitle className="text-2xl font-bold">{doctorName}</CardTitle>
 
             <div className="space-y-1 mt-1">
@@ -131,6 +133,12 @@ export const AppointmentBooking = ({
                 </p>
               )}
             </div>
+
+            {bio && (
+              <p className="text-white/80 text-xs mt-2 leading-relaxed max-w-lg line-clamp-2">
+                {bio}
+              </p>
+            )}
 
             <div className="flex flex-wrap gap-2 mt-3 text-xs font-medium">
               <span className="bg-white/20 backdrop-blur-md px-3 py-1 rounded-full border border-white/30 text-white">
@@ -208,13 +216,19 @@ export const AppointmentBooking = ({
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-100 text-teal-700 text-xs font-bold">2</span>
                 <span>Fecha</span>
               </h3>
-              <div className="border border-slate-100 rounded-2xl p-2 bg-slate-50/30">
+              <div className="border border-slate-100 rounded-2xl p-4 md:p-6 bg-white shadow-sm flex justify-center w-full">
                 <Calendar
                   mode="single"
                   selected={selectedDate}
                   onSelect={setSelectedDate}
                   disabled={(date) => date < new Date() || date.getDay() === 0}
-                  className="rounded-md"
+                  className="rounded-xl border-none w-full max-w-sm"
+                  classNames={{
+                    month: "w-full space-y-4",
+                    table: "w-full border-collapse space-y-1",
+                    head_row: "flex w-full justify-between",
+                    row: "flex w-full mt-2 justify-between"
+                  }}
                   locale={es}
                 />
               </div>
@@ -288,7 +302,7 @@ export const AppointmentBooking = ({
                   <div className="absolute top-[-20px] right-[-20px] h-20 w-20 bg-white/5 rounded-full group-hover:scale-150 transition-transform duration-500" />
                   <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-2"><span>Resumen de reserva</span></p>
                   <div className="space-y-1">
-                    <p className="text-lg font-black"><span>{format(new Date(selectedSlot), 'EEEE d MMM, yyyy', { locale: es })}</span></p>
+                    <p className="text-lg font-black"><span>{format(new Date(selectedSlot), "EEEE d 'de' MMMM 'de' yyyy", { locale: es })}</span></p>
                     <div className="flex items-center gap-2 text-teal-400 font-bold">
                       <Clock className="h-4 w-4" />
                       <span>{formatSlotTime(selectedSlot)}</span>

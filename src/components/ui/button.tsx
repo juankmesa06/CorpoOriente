@@ -15,6 +15,10 @@ const buttonVariants = cva(
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
+        brand: "bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold shadow-md shadow-teal-600/20 rounded-full",
+        brandSquare: "bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-semibold shadow-md shadow-teal-600/20 rounded-xl",
+        brandOutline: "border-2 border-slate-200 bg-transparent text-slate-700 hover:border-teal-600 hover:text-teal-700 hover:bg-teal-50",
+        brandGhost: "bg-transparent text-slate-600 hover:bg-slate-50 hover:text-teal-700",
       },
       size: {
         default: "h-10 px-4 py-2",
@@ -32,7 +36,7 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 

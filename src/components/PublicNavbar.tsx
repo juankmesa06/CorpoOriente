@@ -60,15 +60,16 @@ export const PublicNavbar = () => {
                                 <>
                                     <Link to="/auth">
                                         <Button
-                                            variant="ghost"
-                                            className="rounded-full px-5 font-semibold text-slate-600 hover:text-teal-700 hover:bg-teal-50"
+                                            variant="brandGhost"
+                                            className="rounded-full px-5 font-semibold text-slate-600 hover:text-brand-hover hover:bg-brand-muted"
                                         >
                                             Iniciar Sesión
                                         </Button>
                                     </Link>
                                     <Link to="/auth?mode=register">
                                         <Button
-                                            className="rounded-full px-6 font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-md shadow-teal-600/20 hover:shadow-lg transition-all"
+                                            variant="brand"
+                                            className="px-6 hover:shadow-lg transition-all"
                                         >
                                             Agendar Cita
                                         </Button>
@@ -77,7 +78,8 @@ export const PublicNavbar = () => {
                             ) : (
                                 <Link to="/dashboard">
                                     <Button
-                                        className="rounded-full px-6 font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-md shadow-teal-600/20 hover:shadow-lg transition-all"
+                                        variant="brand"
+                                        className="px-6 hover:shadow-lg transition-all"
                                     >
                                         Ir al Panel Principal
                                     </Button>
@@ -88,7 +90,7 @@ export const PublicNavbar = () => {
 
                     {/* Mobile Menu Toggle */}
                     <button
-                        className="md:hidden p-2 text-slate-600 hover:text-teal-600 hover:bg-slate-50 rounded-lg transition-colors"
+                        className="md:hidden p-2 text-slate-600 hover:text-brand-hover hover:bg-slate-50 rounded-lg transition-colors"
                         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                     >
                         {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -108,8 +110,8 @@ export const PublicNavbar = () => {
                                 className={`
                                     px-4 py-3 rounded-xl text-base font-medium transition-all duration-200 block
                                     ${isActive(item.href)
-                                        ? 'text-teal-700 bg-teal-50'
-                                        : 'text-slate-600 hover:text-teal-700 hover:bg-slate-50'
+                                        ? 'text-brand-hover bg-brand-muted'
+                                        : 'text-slate-600 hover:text-brand-hover hover:bg-slate-50'
                                     }
                                 `}
                             >
@@ -121,15 +123,16 @@ export const PublicNavbar = () => {
                             <div className="flex flex-col gap-3">
                                 <Link to="/auth" onClick={() => setIsMobileMenuOpen(false)}>
                                     <Button
-                                        variant="outline"
-                                        className="w-full rounded-xl h-12 font-semibold text-slate-600 border-slate-200"
+                                        variant="brandOutline"
+                                        className="w-full rounded-xl h-12 font-semibold text-slate-600"
                                     >
                                         Iniciar Sesión
                                     </Button>
                                 </Link>
                                 <Link to="/auth?mode=register" onClick={() => setIsMobileMenuOpen(false)}>
                                     <Button
-                                        className="w-full rounded-xl h-12 font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-600/20"
+                                        variant="brandSquare"
+                                        className="w-full h-12 hover:shadow-lg"
                                     >
                                         Agendar Cita
                                     </Button>
@@ -138,7 +141,8 @@ export const PublicNavbar = () => {
                         ) : (
                             <Link to="/dashboard" onClick={() => setIsMobileMenuOpen(false)}>
                                 <Button
-                                    className="w-full rounded-xl h-12 font-semibold bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-600/20"
+                                    variant="brandSquare"
+                                    className="w-full h-12 hover:shadow-lg"
                                 >
                                     Ir al Panel Principal
                                 </Button>

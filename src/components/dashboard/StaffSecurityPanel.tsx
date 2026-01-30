@@ -139,7 +139,7 @@ export const StaffSecurityPanel = () => {
 
                         <Button
                             type="submit"
-                            className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-bold shadow-lg shadow-teal-600/20 rounded-xl transition-all relative overflow-hidden"
+                            variant="brandSquare" className="w-full h-11"
                             disabled={loading}
                         >
                             <span className={`inline-flex items-center gap-2 transition-all duration-200 ${loading ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>

@@ -151,7 +151,7 @@ const Appointments = () => {
           setPatientProfileId(patientProfile.id);
           const { data: doctorProfiles } = await supabase
             .from('doctor_profiles')
-            .select('id, user_id, specialty, bio, consultation_fee')
+            .select('id, user_id, specialty, bio, consultation_fee, photo_url')
             .order('id');
 
           if (doctorProfiles) {
@@ -165,8 +165,8 @@ const Appointments = () => {
 
             setDoctors(doctorProfiles.map((d: any) => {
               const profile = profilesMap.get(d.user_id);
-              // DEBUG: Check photo URLs
-              if (!profile?.avatar_url) console.warn(`Missing photo for doctor ${d.id} (${profile?.full_name})`);
+              // Prioritize doctor_profiles.photo_url, then profile.avatar_url
+              const finalPhotoUrl = d.photo_url || profile?.avatar_url;
 
               return {
                 doctorProfileId: d.id,
@@ -174,7 +174,7 @@ const Appointments = () => {
                 specialty: d.specialty,
                 bio: d.bio,
                 consultationFee: d.consultation_fee,
-                doctorPhoto: profile?.avatar_url,
+                doctorPhoto: finalPhotoUrl,
                 university: d.university
               };
             }));
@@ -241,26 +241,26 @@ const Appointments = () => {
 
             {/* Steps Banner - LANDING STYLE (Gradient) */}
             {!hasRole('doctor') && !selectedDoctor && (
-              <section className="bg-white rounded-3xl p-1 shadow-lg border-0 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500">
+              <section className="bg-white rounded-3xl p-1 shadow-lg border-0 bg-gradient-to-r from-teal-600 to-emerald-500">
                 <div className="bg-white rounded-[1.4rem] p-8 md:p-10 h-full">
                   <div className="flex items-center gap-4 mb-8">
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center text-white shadow-lg">
+                    <div className="h-8 w-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-600 shadow-sm">
                       <Sparkles className="h-4 w-4" />
                     </div>
                     <div>
-                      <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Centro de Bienestar</h2>
-                      <p className="text-slate-500 text-sm font-medium">Gestiona tu salud con excelencia.</p>
+                      <h2 className="text-2xl font-bold text-slate-800 tracking-tight">¿Cómo agendar tu cita?</h2>
+                      <p className="text-slate-500 text-sm font-medium">Sigue estos sencillos pasos para reservar tu espacio.</p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {[
-                      { title: 'Selecciona', desc: 'Tu especialista ideal.', icon: Stethoscope },
-                      { title: 'Agenda', desc: 'Reserva tu espacio.', icon: CalendarDays },
-                      { title: 'Consulta', desc: 'Atención integral.', icon: CheckCircle2 }
+                      { title: '1. Elige Especialista', desc: 'Selecciona el profesional que necesitas.', icon: Stethoscope },
+                      { title: '2. Verifica Disponibilidad', desc: 'Revisa los horarios libres en el calendario.', icon: CalendarDays },
+                      { title: '3. Confirma tu Cita', desc: 'Completa la reserva y realiza el pago.', icon: CheckCircle2 }
                     ].map((item, i) => (
                       <div key={i} className="flex gap-4 items-start group">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-50 text-teal-600 group-hover:bg-gradient-to-br group-hover:from-teal-500 group-hover:to-cyan-500 group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm">
+                        <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 group-hover:bg-teal-600 group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-sm">
                           <item.icon className="h-6 w-6" />
                         </div>
                         <div>
@@ -319,7 +319,7 @@ const Appointments = () => {
                         "{doc.bio || 'Especialista comprometido con el bienestar integral del paciente.'}"
                       </p>
 
-                      <Button className="w-full bg-slate-900 group-hover:bg-gradient-to-r group-hover:from-teal-500 group-hover:to-cyan-500 text-white rounded-xl h-12 font-bold transition-all shadow-lg shadow-slate-200 group-hover:shadow-teal-500/20 border-0">
+                      <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl h-12 font-bold transition-all shadow-lg shadow-teal-600/20 border-0">
                         Ver Disponibilidad
                       </Button>
                     </div>
@@ -335,7 +335,7 @@ const Appointments = () => {
                   <ChevronRight className="h-4 w-4 rotate-180 mr-1" /> Regresar al directorio
                 </Button>
                 <div className="bg-white rounded-[2rem] shadow-xl p-8 lg:p-10 border border-slate-100 relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-teal-500 via-cyan-500 to-blue-500" />
+                  <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-teal-500 to-emerald-500" />
                   <div className="mb-8 border-b border-slate-100 pb-6">
                     <h2 className="text-2xl font-bold text-slate-800">Agendar Cita</h2>
                     <p className="text-slate-500 mt-1">Con el Dr. <span className="font-bold text-teal-600">{selectedDoctor.doctorName}</span></p>
@@ -349,6 +349,7 @@ const Appointments = () => {
                       consultationFee={selectedDoctor.consultationFee}
                       specialty={selectedDoctor.specialty}
                       university={selectedDoctor.university}
+                      bio={selectedDoctor.bio}
                       onSuccess={handleBookingSuccess}
                     />
                   )}
@@ -419,7 +420,7 @@ const Appointments = () => {
                             <div className="flex justify-between items-start mb-3 pl-3">
                               <div>
                                 <p className="text-[10px] font-bold text-teal-600 uppercase tracking-wider mb-0.5">
-                                  <span>{format(new Date(apt.start_time), 'EEEE d, MMM', { locale: es })}</span>
+                                  <span>{format(new Date(apt.start_time), "EEEE d 'de' MMMM", { locale: es })}</span>
                                 </p>
                                 <p className="text-xl font-bold text-slate-800 tracking-tight">
                                   <span>{format(new Date(apt.start_time), 'h:mm a')}</span>
@@ -430,7 +431,12 @@ const Appointments = () => {
                                 apt.status === 'confirmed' ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
                                   apt.status === 'completed' ? "bg-blue-50 text-blue-700 border-blue-100" : "bg-slate-100 text-slate-500"
                               )}>
-                                <span>{apt.status === 'completed' ? 'FINALIZADA' : apt.status}</span>
+                                <span>
+                                  {apt.status === 'completed' ? 'FINALIZADA' :
+                                    apt.status === 'confirmed' ? 'CONFIRMADO' :
+                                      apt.status === 'paid' ? 'PAGADO' :
+                                        apt.status}
+                                </span>
                               </Badge>
                             </div>
 
@@ -526,7 +532,7 @@ const Appointments = () => {
 
                                 return (
                                   <Button
-                                    className="w-full bg-gradient-to-r from-teal-500 to-cyan-500 hover:to-teal-600 text-white rounded-xl h-9 text-xs font-bold transition-all shadow-md shadow-teal-500/20 border-0"
+                                    className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl h-9 text-xs font-bold transition-all shadow-md shadow-teal-600/20 border-0"
                                     onClick={() => window.open((apt as any).meeting_url || `https://meet.jit.si/CorpoOriente-${apt.id}`, '_blank')}
                                   >
                                     <Video className="h-3.5 w-3.5 mr-1.5" /> <span>{hasRole('doctor') ? 'Iniciar Cita' : 'Unirse'}</span>

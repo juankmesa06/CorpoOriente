@@ -35,7 +35,7 @@ const ResetPassword = () => {
 
                 if (profileData) {
                     const profile = profileData as any;
-                    if (profile.phone) setPhone(profile.phone);
+                    if (profile.phone) setPhone(profile.phone.replace(/^\+57/, ''));
                     if (profile.address) setAddress(profile.address || '');
                 }
             }
@@ -81,7 +81,7 @@ const ResetPassword = () => {
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .update({
-                        phone: phone,
+                        phone: `+57${phone}`,
                         address: address
                     })
                     .eq('user_id', user.id);
@@ -149,13 +149,13 @@ const ResetPassword = () => {
                                 <div className="space-y-2">
                                     <Label htmlFor="phone" className="text-sm font-semibold text-slate-700">Teléfono</Label>
                                     <div className="relative">
-                                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                        <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium select-none pointer-events-none">+57</div>
                                         <Input
                                             id="phone"
-                                            placeholder="+58 ..."
+                                            placeholder="300 123 4567"
                                             value={phone}
-                                            onChange={(e) => setPhone(e.target.value)}
-                                            className="pl-9 h-11 border-slate-200 rounded-xl focus:border-teal-500 bg-slate-50/50"
+                                            onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                            className="pl-12 h-11 border-slate-200 rounded-xl focus:border-teal-500 bg-slate-50/50"
                                             required
                                         />
                                     </div>

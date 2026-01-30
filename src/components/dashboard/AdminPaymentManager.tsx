@@ -230,13 +230,16 @@ export const AdminPaymentManager = () => {
                     doctor_id,
                     start_time,
                     end_time,
+                    is_virtual,
                     payments!inner(amount, status),
                     rooms (
+                        id,
+                        name,
                         room_type,
                         price_per_hour
                     )
                 `)
-                .eq('payments.status', 'paid')
+                .in('payments.status', ['paid', 'confirmed', 'completed'])
                 .gte('start_time', start.toISOString())
                 .lte('start_time', end.toISOString());
 
@@ -264,16 +267,35 @@ export const AdminPaymentManager = () => {
                     const stats = payoutMap[apt.doctor_id];
                     stats.total_appointments += 1;
 
-                    const paymentAmount = apt.payments?.[0]?.amount || 0;
+                    // Sum all successful payments for this appointment
+                    const validPayments = Array.isArray(apt.payments)
+                        ? apt.payments
+                        : [apt.payments];
+
+                    const paymentAmount = validPayments.reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
                     stats.appointment_revenue += paymentAmount;
 
                     let rentalCost = 0;
+
+                    // Logic for rental cost deduction
                     if (apt.is_virtual) {
                         rentalCost = 10000;
                     } else if (apt.rooms) {
-                        const isVirtual = apt.rooms.room_type === 'virtual' || apt.rooms.name?.toLowerCase().includes('virtual');
-                        rentalCost = isVirtual ? 10000 : 100000;
+                        // If it has a specific room assigned
+                        if (apt.rooms.room_type === 'virtual' || apt.rooms.name?.toLowerCase().includes('virtual')) {
+                            rentalCost = 10000;
+                        } else {
+                            // Physical room
+                            // Check if room has hourly rate, else fallback
+                            rentalCost = apt.rooms.price_per_hour || 100000;
+                        }
+                    } else {
+                        // Fallback if no room and not marked virtual but presumably physical?
+                        // Or maybe we shouldn't charge if no room assigned?
+                        // Assuming physical default if not virtual flag
+                        rentalCost = 100000;
                     }
+
                     stats.rental_costs += rentalCost;
                     stats.net_payout = Math.max(0, stats.appointment_revenue - stats.rental_costs);
                 }
@@ -420,17 +442,23 @@ export const AdminPaymentManager = () => {
         let implicitRentalIncome = 0;
 
         completedPayments.forEach(p => {
-            totalGrossAptIncome += p.amount;
+            totalGrossAptIncome += (p.amount || 0);
 
             const apt = p.appointments as any;
             const actualApt = Array.isArray(apt) ? apt[0] : apt;
 
-            if (actualApt && actualApt.rooms) {
+            if (actualApt) {
                 let rentalCost = 0;
-                if (actualApt.rooms.room_type === 'virtual') {
+                if (actualApt.is_virtual) {
                     rentalCost = 10000;
+                } else if (actualApt.rooms) {
+                    if (actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual')) {
+                        rentalCost = 10000;
+                    } else {
+                        rentalCost = actualApt.rooms.price_per_hour || 100000;
+                    }
                 } else {
-                    rentalCost = 25000; // Standard fallback cost
+                    rentalCost = 100000; // Fallback
                 }
                 implicitRentalIncome += rentalCost;
             }
@@ -447,12 +475,14 @@ export const AdminPaymentManager = () => {
                     if (actualApt.is_virtual) {
                         cost = 10000;
                     } else if (actualApt.rooms) {
-                        const isVirtualRoom = actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual');
-                        cost = isVirtualRoom ? 10000 : 100000;
+                        if (actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual')) {
+                            cost = 10000;
+                        } else {
+                            cost = actualApt.rooms.price_per_hour || 100000;
+                        }
+                    } else {
+                        cost = 100000;
                     }
-                    // If not virtual flag and no room, assume 0 or handle error? 
-                    // For now, if no room and not virtual, we can't charge rent.
-
                     subImplicit += cost;
                 }
             });
@@ -544,8 +574,11 @@ export const AdminPaymentManager = () => {
                     isVirt = true;
                 } else if (actualApt.rooms) {
                     const isVirtualRoom = actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual');
-                    cost = isVirtualRoom ? 10000 : 100000;
+                    cost = isVirtualRoom ? 10000 : (actualApt.rooms.price_per_hour || 100000);
                     isVirt = isVirtualRoom;
+                } else {
+                    cost = 100000;
+                    isVirt = false;
                 }
 
                 if (cost > 0) {

@@ -26,15 +26,22 @@ export const Footer = () => {
                             Comprometidos con tu bienestar mental y emocional. Creando espacios seguros para sanar, crecer y transformar vidas.
                         </p>
                         <div className="flex gap-4">
-                            {[Facebook, Instagram, Twitter].map((Icon, i) => (
-                                <a
-                                    key={i}
-                                    href="#"
-                                    className="h-9 w-9 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-teal-600 hover:border-teal-500 hover:text-white flex items-center justify-center transition-all duration-300 text-slate-400 group"
-                                >
-                                    <Icon className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                </a>
-                            ))}
+                            <a
+                                href="https://www.facebook.com/cpsicoterapeuticodeoriente/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="h-9 w-9 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-brand-hover hover:border-brand-hover hover:text-white flex items-center justify-center transition-all duration-300 text-slate-400 group"
+                            >
+                                <Facebook className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                            </a>
+                            <a
+                                href="https://www.instagram.com/c_psicoterapeuticodeoriente/"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="h-9 w-9 rounded-xl bg-slate-800/50 border border-slate-700/50 hover:bg-brand-hover hover:border-brand-hover hover:text-white flex items-center justify-center transition-all duration-300 text-slate-400 group"
+                            >
+                                <Instagram className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                            </a>
                         </div>
                     </div>
 
@@ -51,9 +58,9 @@ export const Footer = () => {
                                 <li key={i}>
                                     <a
                                         href={link.href}
-                                        className="text-slate-400 hover:text-teal-400 transition-colors flex items-center gap-3 group"
+                                        className="text-slate-400 hover:text-brand-light transition-colors flex items-center gap-3 group"
                                     >
-                                        <div className="h-1.5 w-1.5 rounded-full bg-slate-700 group-hover:bg-teal-400 transition-colors"></div>
+                                        <div className="h-1.5 w-1.5 rounded-full bg-slate-700 group-hover:bg-brand-light transition-colors"></div>
                                         {link.label}
                                     </a>
                                 </li>
@@ -67,23 +74,23 @@ export const Footer = () => {
                         <ul className="space-y-4 text-sm">
                             <li className="flex items-start gap-4 text-slate-400 group">
                                 <div className="h-8 w-8 rounded-lg bg-teal-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-teal-500/20 transition-colors mt-0.5">
-                                    <MapPin className="h-4 w-4 text-teal-400" />
+                                    <MapPin className="h-4 w-4 text-brand-hover" />
                                 </div>
                                 <span className="group-hover:text-slate-300 transition-colors">Calle 48 #62b 106, Rionegro, Antioquia</span>
                             </li>
                             <li className="flex items-center gap-4 text-slate-400 group">
                                 <div className="h-8 w-8 rounded-lg bg-teal-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-teal-500/20 transition-colors">
-                                    <Phone className="h-4 w-4 text-teal-400" />
+                                    <Phone className="h-4 w-4 text-brand-hover" />
                                 </div>
-                                <a href="tel:+573217861080" className="group-hover:text-teal-400 transition-colors">
+                                <a href="tel:+573217861080" className="group-hover:text-brand-light transition-colors">
                                     +57 321 786 10 80
                                 </a>
                             </li>
                             <li className="flex items-center gap-4 text-slate-400 group">
                                 <div className="h-8 w-8 rounded-lg bg-teal-500/10 flex items-center justify-center flex-shrink-0 group-hover:bg-teal-500/20 transition-colors">
-                                    <Mail className="h-4 w-4 text-teal-400" />
+                                    <Mail className="h-4 w-4 text-brand-hover" />
                                 </div>
-                                <a href="mailto:Hola@cpo.co" className="group-hover:text-teal-400 transition-colors">
+                                <a href="mailto:Hola@cpo.co" className="group-hover:text-brand-light transition-colors">
                                     Hola@cpo.co
                                 </a>
                             </li>
@@ -102,8 +109,8 @@ export const Footer = () => {
                         </p>
                         <div className="w-px h-3 bg-slate-700 hidden md:block"></div>
                         <div className="flex gap-4 opacity-70">
-                            <a href="#" className="hover:text-teal-400 transition-colors">Privacidad</a>
-                            <a href="#" className="hover:text-teal-400 transition-colors">Términos</a>
+                            <Link to="/privacy" className="hover:text-brand-light transition-colors">Política de Privacidad</Link>
+                            <Link to="/terms" className="hover:text-brand-light transition-colors">Términos y Condiciones</Link>
                         </div>
                     </div>
                 </div>
