@@ -18,12 +18,28 @@ export function PublicRoute({ children }: PublicRouteProps) {
     }
 
     if (user) {
-        // En Supabase, el evento de recuperación de contraseña inicia sesión al usuario.
-        // Solo redirigimos al dashboard si NO es una sesión de recuperación.
+        // Check for special auth events that should not redirect to dashboard
         const isRecovery = window.location.href.includes('type=recovery') ||
             window.location.hash.includes('type=recovery');
+        
+        // Check for invitation tokens (type=invite or type=signup from Supabase)
+        const isInvite = window.location.href.includes('type=invite') ||
+            window.location.hash.includes('type=invite') ||
+            window.location.href.includes('type=signup') ||
+            window.location.hash.includes('type=signup');
 
-        if (!isRecovery) {
+        // Check if user needs to set up their password
+        const setupRequired = user.user_metadata?.setup_required === true;
+        const userRole = user.user_metadata?.role;
+        const isStaffMember = ['admin', 'receptionist', 'doctor'].includes(userRole);
+
+        // If user needs setup and is staff, redirect to setup page
+        if (setupRequired && isStaffMember) {
+            return <Navigate to="/auth/setup-password" replace />;
+        }
+
+        // Don't redirect to dashboard if this is a recovery or invite session
+        if (!isRecovery && !isInvite) {
             return <Navigate to="/dashboard" replace />;
         }
     }

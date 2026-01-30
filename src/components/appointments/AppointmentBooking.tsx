@@ -216,21 +216,23 @@ export const AppointmentBooking = ({
                 <span className="flex items-center justify-center w-6 h-6 rounded-full bg-teal-100 text-teal-700 text-xs font-bold">2</span>
                 <span>Fecha</span>
               </h3>
-              <div className="border border-slate-100 rounded-2xl p-4 md:p-6 bg-white shadow-sm flex justify-center w-full">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  disabled={(date) => date < new Date() || date.getDay() === 0}
-                  className="rounded-xl border-none w-full max-w-sm"
-                  classNames={{
-                    month: "w-full space-y-4",
-                    table: "w-full border-collapse space-y-1",
-                    head_row: "flex w-full justify-between",
-                    row: "flex w-full mt-2 justify-between"
-                  }}
-                  locale={es}
-                />
+              <div className="border border-slate-100 rounded-2xl p-2 sm:p-4 md:p-6 bg-white shadow-sm w-full overflow-hidden">
+                <div className="w-full overflow-x-auto -mx-2 sm:mx-0 px-2 sm:px-0">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    disabled={(date) => date < new Date() || date.getDay() === 0}
+                    className="rounded-xl border-none w-full min-w-[280px] mx-auto"
+                    classNames={{
+                      month: "w-full space-y-3 sm:space-y-4",
+                      table: "w-full border-collapse space-y-1",
+                      head_row: "flex w-full justify-between",
+                      row: "flex w-full mt-1 sm:mt-2 justify-between gap-1 sm:gap-0"
+                    }}
+                    locale={es}
+                  />
+                </div>
               </div>
             </section>
 
@@ -248,16 +250,16 @@ export const AppointmentBooking = ({
                     <p className="text-sm font-medium text-slate-400"><span>Consultando agenda...</span></p>
                   </div>
                 ) : slots.length > 0 ? (
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
                     {slots.map((slot) => (
                       <button
                         key={slot}
                         onClick={() => setSelectedSlot(slot)}
                         className={cn(
-                          "py-3 rounded-xl border-2 font-bold text-sm transition-all duration-200",
+                          "py-3 sm:py-3 rounded-xl border-2 font-bold text-sm sm:text-base transition-all duration-200 active:scale-95 touch-manipulation min-h-[48px]",
                           selectedSlot === slot
-                            ? "bg-slate-800 border-slate-800 text-white shadow-lg scale-105"
-                            : "bg-white border-slate-100 text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                            ? "bg-gradient-to-r from-teal-600 to-teal-700 border-teal-600 text-white shadow-md shadow-teal-600/20 scale-105"
+                            : "bg-white border-slate-100 text-slate-600 hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50"
                         )}
                       >
                         <span>{formatSlotTime(slot)}</span>

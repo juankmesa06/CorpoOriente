@@ -82,7 +82,8 @@ serve(async (req) => {
             email_confirm: true, // Auto-confirm email
             user_metadata: {
                 full_name: full_name,
-                role: 'doctor' // This will be picked up by handle_new_user trigger
+                role: 'doctor', // This will be picked up by handle_new_user trigger
+                setup_required: true // Mark that user needs to set up their password
             }
         })
 
@@ -127,7 +128,7 @@ serve(async (req) => {
         )
 
         const { error: resetError } = await supabasePublic.auth.resetPasswordForEmail(email, {
-            redirectTo: `${req.headers.get('origin')}/auth/reset-password`
+            redirectTo: `${req.headers.get('origin')}/auth/setup-password`
         })
 
         if (resetError) {

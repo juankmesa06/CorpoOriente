@@ -85,4 +85,53 @@
   .text-h2 {
     @apply text-2xl lg:text-3xl font-bold text-slate-900;
   }
+
+  /* Calendar responsive improvements - Manual de Marca CPO */
+  .rdp {
+    --rdp-cell-size: 2.5rem;
+    --rdp-accent-color: hsl(173 80% 40%);
+    --rdp-background-color: hsl(166 76% 97%);
+    --rdp-accent-color-dark: hsl(173 80% 35%);
+    --rdp-outline: 2px solid var(--rdp-accent-color);
+    --rdp-outline-selected: 2px solid var(--rdp-accent-color-dark);
+  }
+
+  @media (max-width: 640px) {
+    .rdp {
+      --rdp-cell-size: 2.75rem;
+    }
+    
+    .rdp-day {
+      min-width: var(--rdp-cell-size);
+      min-height: var(--rdp-cell-size);
+    }
+    
+    .rdp-head_cell {
+      min-width: var(--rdp-cell-size);
+      min-height: 2rem;
+    }
+  }
+
+  @media (min-width: 640px) {
+    .rdp {
+      --rdp-cell-size: 2.75rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .rdp {
+      --rdp-cell-size: 3rem;
+    }
+  }
+
+  /* Touch-friendly calendar buttons */
+  .rdp-day {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .rdp-nav_button {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
 }

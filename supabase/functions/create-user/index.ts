@@ -69,7 +69,7 @@ serve(async (req) => {
         try {
             const { data: userCreated, error: createError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
                 data: { full_name, role, setup_required: true },
-                redirectTo: `${req.headers.get('origin')}/dashboard`
+                redirectTo: `${req.headers.get('origin')}/auth/setup-password`
             })
 
             if (createError) throw createError

@@ -223,13 +223,16 @@ export function AdminAppointmentManager() {
                                     {date ? format(date, "PPP", { locale: es }) : <span>Elegir fecha</span>}
                                 </Button>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                    mode="single"
-                                    selected={date}
-                                    onSelect={setDate}
-                                    initialFocus
-                                />
+                            <PopoverContent className="w-auto p-0 max-w-[calc(100vw-2rem)] sm:max-w-none">
+                                <div className="overflow-x-auto -mx-2 sm:mx-0 px-2 sm:px-0">
+                                    <Calendar
+                                        mode="single"
+                                        selected={date}
+                                        onSelect={setDate}
+                                        initialFocus
+                                        className="min-w-[280px]"
+                                    />
+                                </div>
                             </PopoverContent>
                         </Popover>
                     </div>

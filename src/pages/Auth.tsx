@@ -42,6 +42,7 @@ export default function Auth() {
   const [showResetDialog, setShowResetDialog] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
   const [isResetPending, setIsResetPending] = useState(false);
+  const [justRegistered, setJustRegistered] = useState(false);
 
   // Form states
   const [loginEmail, setLoginEmail] = useState('');
@@ -56,8 +57,9 @@ export default function Auth() {
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [showSignupConfirm, setShowSignupConfirm] = useState(false);
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
 
-  // Check for errors in URL (e.g. from email confirmation)
+  // Check for errors in URL (e.g. from email confirmation) and mode parameter
   useEffect(() => {
     const hash = window.location.hash;
     if (hash && hash.includes('error=')) {
@@ -71,14 +73,20 @@ export default function Auth() {
         toast.error(`Error: ${error}`);
       }
     }
+
+    // Check if mode=register is in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'register') {
+      setActiveTab('signup');
+    }
   }, []);
 
-  // Redirigir si ya está autenticado
+  // Redirigir si ya está autenticado (pero NO si acaba de registrarse)
   useEffect(() => {
-    if (user && !loading && !showSuccessDialog) {
+    if (user && !loading && !showSuccessDialog && !justRegistered) {
       navigate('/');
     }
-  }, [user, loading, navigate, showSuccessDialog]);
+  }, [user, loading, navigate, showSuccessDialog, justRegistered]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,6 +152,7 @@ export default function Auth() {
       return;
     }
 
+    setJustRegistered(true);
     setShowSuccessDialog(true);
   };
 
@@ -207,7 +216,7 @@ export default function Auth() {
           </div>
 
           <CardContent className="p-6 sm:p-8 pb-6">
-            <Tabs defaultValue="login" className="w-full">
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'login' | 'signup')} className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6 bg-slate-100/80 p-1.5 h-14 rounded-xl border border-slate-200/50">
                 <TabsTrigger value="login" className="rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-lg data-[state=active]:text-teal-700 font-bold transition-all text-slate-500">
                   Iniciar Sesión
@@ -482,8 +491,15 @@ export default function Auth() {
           </div>
 
           <Button
-            onClick={() => setShowSuccessDialog(false)}
-            className="w-full h-12 bg-teal-600 hover:bg-teal-700 text-white font-bold rounded-xl shadow-lg shadow-teal-600/20"
+            onClick={() => {
+              setShowSuccessDialog(false);
+              // Mantener el usuario en la pestaña de registro sin redirigir
+              // Los datos del formulario se mantienen automáticamente en el estado
+              // No limpiar justRegistered para evitar redirección automática
+            }}
+            variant="brandSquare"
+            size="lg"
+            className="w-full h-12"
           >
             Entendido, ya reviso mi correo
           </Button>

@@ -17,6 +17,7 @@ import Terms from "./pages/Terms";
 import NotFound from "./pages/NotFound";
 import PatientPayment from "./pages/PatientPayment";
 import ResetPassword from "./pages/ResetPassword";
+import SetupPassword from "./pages/SetupPassword";
 import RentalSpaces from "./pages/RentalSpaces";
 import { Footer } from "@/components/Footer";
 import { Loader2 } from "lucide-react";
@@ -111,6 +112,14 @@ const AppRoutes = () => {
         element={
           <ProtectedRoute>
             <ResetPassword />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/auth/setup-password"
+        element={
+          <ProtectedRoute>
+            <SetupPassword />
           </ProtectedRoute>
         }
       />
