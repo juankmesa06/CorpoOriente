@@ -38,7 +38,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format, isToday, parseISO, addHours } from 'date-fns';
+import { format, isToday, parseISO, addHours, addDays, startOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { AdminPatientManager } from './AdminPatientManager';
 import { AdminAppointmentBooking } from './AdminAppointmentBooking';
@@ -74,11 +74,21 @@ interface Stats {
     checkedIn: number;
 }
 
-type Section = 'overview' | 'appointments' | 'patients' | 'doctors' | 'rentals' | 'security' | 'profile';
+type Section = 'overview' | 'appointments' | 'patients' | 'doctors' | 'agenda' | 'rentals' | 'security' | 'profile';
+
+interface DoctorAgendaItem {
+    id: string;
+    full_name: string;
+    specialty: string;
+    appointments: { id: string; start_time: string; end_time: string; status: string; patient_name: string }[];
+}
 
 const ReceptionistDashboard = () => {
     const [activeSection, setActiveSection] = useState<Section>('overview');
     const [appointments, setAppointments] = useState<Appointment[]>([]);
+    const [agendaDate, setAgendaDate] = useState<Date>(new Date());
+    const [doctorsAgenda, setDoctorsAgenda] = useState<DoctorAgendaItem[]>([]);
+    const [loadingAgenda, setLoadingAgenda] = useState(false);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [stats, setStats] = useState<Stats>({
@@ -98,6 +108,66 @@ const ReceptionistDashboard = () => {
         return () => clearInterval(interval);
     }, []);
 
+    const loadDoctorsAgenda = async () => {
+        setLoadingAgenda(true);
+        const start = startOfDay(agendaDate);
+        const end = addDays(start, 1); // fin del día para filtro
+        try {
+            const { data: doctorsData } = await supabase
+                .from('doctor_profiles')
+                .select('id, user_id, specialty')
+                .order('specialty');
+            const userIds = doctorsData?.map(d => d.user_id) || [];
+            const { data: profiles } = await supabase
+                .from('profiles')
+                .select('user_id, full_name')
+                .in('user_id', userIds);
+
+            const { data: apts } = await supabase
+                .from('appointments')
+                .select('id, doctor_id, start_time, end_time, status, patient_id, external_patient_name')
+                .gte('start_time', start.toISOString())
+                .lt('start_time', end.toISOString())
+                .in('status', ['scheduled', 'confirmed', 'checked_in', 'in_progress', 'completed']);
+
+            const patientIds = [...new Set(apts?.map(a => a.patient_id).filter(Boolean) || [])];
+            const { data: pp } = await supabase.from('patient_profiles').select('id, user_id').in('id', patientIds);
+            const puIds = pp?.map(p => p.user_id) || [];
+            const { data: pu } = puIds.length ? await supabase.from('profiles').select('user_id, full_name').in('user_id', puIds) : { data: [] };
+
+            const getPatientName = (apt: { patient_id: string | null; external_patient_name: string | null }) => {
+                if (apt.external_patient_name) return apt.external_patient_name;
+                const p = pp?.find(x => x.id === apt.patient_id);
+                return pu?.find(u => u.user_id === p?.user_id)?.full_name || 'Paciente';
+            };
+
+            const agenda: DoctorAgendaItem[] = (doctorsData || []).map(d => ({
+                id: d.id,
+                full_name: profiles?.find(p => p.user_id === d.user_id)?.full_name || 'Doctor',
+                specialty: d.specialty || '',
+                appointments: (apts || [])
+                    .filter(a => a.doctor_id === d.id)
+                    .map(a => ({
+                        id: a.id,
+                        start_time: a.start_time,
+                        end_time: a.end_time,
+                        status: a.status,
+                        patient_name: getPatientName(a)
+                    }))
+                    .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+            }));
+            setDoctorsAgenda(agenda);
+        } catch (e) {
+            toast.error('Error al cargar agenda');
+        } finally {
+            setLoadingAgenda(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeSection === 'agenda') loadDoctorsAgenda();
+    }, [activeSection, agendaDate]);
+
     const loadTodayAppointments = async () => {
         setLoading(true);
         const today = new Date();
@@ -113,6 +183,7 @@ const ReceptionistDashboard = () => {
                 status,
                 notes,
                 patient_id,
+                external_patient_name,
                 doctor_id
             `)
             .gte('start_time', startOfDay)
@@ -158,10 +229,17 @@ const ReceptionistDashboard = () => {
         const appointmentsWithProfiles = data?.map(apt => {
             const patientProfile = patientProfiles?.find(p => p.id === apt.patient_id);
             const doctorProfile = doctorProfiles?.find(d => d.id === apt.doctor_id);
+            const patientUser = patientUsers?.find(u => u.user_id === patientProfile?.user_id);
+            // Paciente externo: usar external_patient_name cuando patient_id es null
+            const patientDisplay = apt.external_patient_name || patientUser?.full_name;
 
             return {
                 ...apt,
-                patient_profile: patientUsers?.find(u => u.user_id === patientProfile?.user_id),
+                patient_profile: {
+                    full_name: patientDisplay || 'Paciente',
+                    email: patientUser?.email,
+                    phone: patientUser?.phone
+                },
                 doctor_profile: {
                     full_name: doctorUsers?.find(u => u.user_id === doctorProfile?.user_id)?.full_name,
                     specialty: doctorProfile?.specialty
@@ -579,6 +657,79 @@ const ReceptionistDashboard = () => {
                         <ReceptionistDoctorManager />
                     </div>
                 );
+            case 'agenda':
+                return (
+                    <div className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div>
+                                <h2 className="text-2xl font-bold tracking-tight text-gray-900">Agenda de Médicos</h2>
+                                <p className="text-muted-foreground">Vista de disponibilidad por médico y día.</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Button variant="outline" size="sm" onClick={() => setAgendaDate(addDays(agendaDate, -1))}>
+                                    ← Ayer
+                                </Button>
+                                <div className="px-4 py-2 rounded-lg bg-teal-50 border border-teal-200 font-medium text-teal-800 min-w-[180px] text-center">
+                                    {format(agendaDate, "EEEE, d 'de' MMMM", { locale: es })}
+                                </div>
+                                <Button variant="outline" size="sm" onClick={() => setAgendaDate(addDays(agendaDate, 1))}>
+                                    Mañana →
+                                </Button>
+                            </div>
+                        </div>
+                        {loadingAgenda ? (
+                            <p className="text-center text-muted-foreground py-12">Cargando agenda...</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {doctorsAgenda.map((doc) => (
+                                    <Card key={doc.id} className="border-teal-100 overflow-hidden">
+                                        <CardHeader className="py-3 bg-gradient-to-r from-teal-50 to-white border-b border-teal-100">
+                                            <div className="flex items-center justify-between">
+                                                <CardTitle className="flex items-center gap-2 text-lg">
+                                                    <Stethoscope className="h-5 w-5 text-teal-600" />
+                                                    Dr. {doc.full_name}
+                                                </CardTitle>
+                                                <Badge variant="outline">{doc.specialty}</Badge>
+                                            </div>
+                                            <CardDescription>
+                                                {doc.appointments.length === 0
+                                                    ? "Sin citas programadas — disponible"
+                                                    : `${doc.appointments.length} cita(s) programada(s)`}
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="pt-4">
+                                            {doc.appointments.length === 0 ? (
+                                                <div className="py-6 text-center text-muted-foreground text-sm">
+                                                    <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                                                    Disponible todo el día
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {doc.appointments.map((apt) => (
+                                                        <div
+                                                            key={apt.id}
+                                                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm"
+                                                        >
+                                                            <Clock className="h-4 w-4 text-teal-600" />
+                                                            <span className="font-mono font-medium">
+                                                                {format(parseISO(apt.start_time), 'HH:mm')} - {format(parseISO(apt.end_time), 'HH:mm')}
+                                                            </span>
+                                                            <span className="text-slate-600">•</span>
+                                                            <span className="text-slate-700">{apt.patient_name}</span>
+                                                            <Badge variant="secondary" className="text-xs">
+                                                                {apt.status === 'scheduled' ? 'Agendada' : apt.status === 'confirmed' ? 'Confirmada' : apt.status === 'checked_in' ? 'En espera' : apt.status === 'in_progress' ? 'En consulta' : apt.status === 'completed' ? 'Completada' : apt.status}
+                                                            </Badge>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                );
             case 'security':
                 return <StaffSecurityPanel />;
             case 'profile':
@@ -622,11 +773,11 @@ const ReceptionistDashboard = () => {
                     <nav className="space-y-1">
                         <NavItem section="overview" label="Resumen del Día" icon={Activity} />
                         <NavItem section="appointments" label="Gestión de Citas" icon={CalendarCheck} />
+                        <NavItem section="agenda" label="Agenda de Médicos" icon={CalendarCheck} />
                         <NavItem section="patients" label="Gestión de Pacientes" icon={Users} />
                         <NavItem section="doctors" label="Gestión de Médicos" icon={UserCog} />
                         <NavItem section="rentals" label="Alquiler de Espacios" icon={Building2} />
                         <div className="pt-2">
-                            <NavItem section="security" label="Crear contraseña" icon={KeyRound} />
                             <NavItem section="profile" label="Mi Perfil" icon={User} />
                         </div>
                     </nav>

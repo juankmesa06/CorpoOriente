@@ -13,7 +13,7 @@ import {
     DollarSign, CheckCircle2, Clock, AlertCircle, TrendingUp, TrendingDown,
     CreditCard, Building2, MoreHorizontal, Trash2, Ban, Calendar,
     Wallet, PieChart, BarChart3, ArrowUpRight, ArrowDownRight, Stethoscope,
-    FileText, Edit2, Settings, History, ChevronRight, Download
+    FileText, Edit2, Settings, History, ChevronRight, Download, List
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -90,6 +90,8 @@ export const AdminPaymentManager = () => {
     const [viewingPayoutDetail, setViewingPayoutDetail] = useState<any>(null);
     const [doctorProfiles, setDoctorProfiles] = useState<Record<string, any>>({});
     const [viewingHistory, setViewingHistory] = useState(false);
+    const [showArimeInvoice, setShowArimeInvoice] = useState(false);
+    const [arimeInvoiceData, setArimeInvoiceData] = useState<any>(null);
 
     const isSuperAdmin = roles.includes('super_admin');
 
@@ -236,7 +238,8 @@ export const AdminPaymentManager = () => {
                         id,
                         name,
                         room_type,
-                        price_per_hour
+                        price_per_hour,
+                        price_per_session
                     )
                 `)
                 .in('payments.status', ['paid', 'confirmed', 'completed'])
@@ -277,23 +280,26 @@ export const AdminPaymentManager = () => {
 
                     let rentalCost = 0;
 
-                    // Logic for rental cost deduction
-                    if (apt.is_virtual) {
-                        rentalCost = 10000;
+                    // Calculate duration in hours
+                    let durationHours = 1; // Default 1 hour
+                    if (apt.start_time && apt.end_time) {
+                        const start = new Date(apt.start_time);
+                        const end = new Date(apt.end_time);
+                        durationHours = Math.max(0.5, (end.getTime() - start.getTime()) / (1000 * 60 * 60)); // Minimum 0.5 hours
+                    }
+
+                    // Calculate rental cost based on type and duration (precios desde BD/espacios)
+                    if (apt.is_virtual && apt.rooms) {
+                        rentalCost = Number(apt.rooms.price_per_session) || Number(apt.rooms.price_per_hour) || 0;
                     } else if (apt.rooms) {
-                        // If it has a specific room assigned
                         if (apt.rooms.room_type === 'virtual' || apt.rooms.name?.toLowerCase().includes('virtual')) {
-                            rentalCost = 10000;
+                            rentalCost = Number(apt.rooms.price_per_session) || Number(apt.rooms.price_per_hour) || 0;
                         } else {
-                            // Physical room
-                            // Check if room has hourly rate, else fallback
-                            rentalCost = apt.rooms.price_per_hour || 100000;
+                            const hourlyRate = Number(apt.rooms.price_per_hour) || 0;
+                            rentalCost = hourlyRate * durationHours;
                         }
                     } else {
-                        // Fallback if no room and not marked virtual but presumably physical?
-                        // Or maybe we shouldn't charge if no room assigned?
-                        // Assuming physical default if not virtual flag
-                        rentalCost = 100000;
+                        rentalCost = 0;
                     }
 
                     stats.rental_costs += rentalCost;
@@ -376,13 +382,14 @@ export const AdminPaymentManager = () => {
                     id,
                     total_price,
                     start_time,
+                    created_at,
                     status,
                     renter_name,
                     rooms(
                         name,
                         room_type
                     )
-                        `)
+                `)
                 .order('start_time', { ascending: false });
 
             if (error) {
@@ -437,6 +444,30 @@ export const AdminPaymentManager = () => {
             .filter(p => p.status === 'paid' || p.status === 'completed' || p.status === 'confirmed');
         const completedRentals = rentals.filter(r => r.status === 'confirmed' || r.status === 'paid');
 
+        // Helper: calcular costo de alquiler de una cita (consultorio virtual = 10000 COP fijo si no hay room)
+        const getAppointmentRentalCost = (actualApt: any): number => {
+            if (!actualApt) return 0;
+            let cost = 0;
+            let durationHours = 1;
+            if (actualApt.start_time && actualApt.end_time) {
+                const start = new Date(actualApt.start_time);
+                const end = new Date(actualApt.end_time);
+                durationHours = Math.max(0.5, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
+            }
+            if (actualApt.is_virtual) {
+                cost = actualApt.rooms
+                    ? (Number(actualApt.rooms.price_per_session) || Number(actualApt.rooms.price_per_hour) || 0)
+                    : 10000; // Costo fijo consultorio virtual
+            } else if (actualApt.rooms) {
+                if (actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual')) {
+                    cost = Number(actualApt.rooms.price_per_session) || Number(actualApt.rooms.price_per_hour) || 0;
+                } else {
+                    cost = (Number(actualApt.rooms.price_per_hour) || 0) * durationHours;
+                }
+            }
+            return cost;
+        };
+
         // Calculate income
         let totalGrossAptIncome = 0;
         let implicitRentalIncome = 0;
@@ -449,17 +480,29 @@ export const AdminPaymentManager = () => {
 
             if (actualApt) {
                 let rentalCost = 0;
-                if (actualApt.is_virtual) {
-                    rentalCost = 10000;
+                
+                // Calculate duration in hours
+                let durationHours = 1; // Default 1 hour
+                if (actualApt.start_time && actualApt.end_time) {
+                    const start = new Date(actualApt.start_time);
+                    const end = new Date(actualApt.end_time);
+                    durationHours = Math.max(0.5, (end.getTime() - start.getTime()) / (1000 * 60 * 60)); // Minimum 0.5 hours
+                }
+                
+                // Calculate rental cost based on type and duration (precios desde BD/espacios)
+                if (actualApt.is_virtual && actualApt.rooms) {
+                    rentalCost = Number(actualApt.rooms.price_per_session) || Number(actualApt.rooms.price_per_hour) || 0;
                 } else if (actualApt.rooms) {
                     if (actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual')) {
-                        rentalCost = 10000;
+                        rentalCost = Number(actualApt.rooms.price_per_session) || Number(actualApt.rooms.price_per_hour) || 0;
                     } else {
-                        rentalCost = actualApt.rooms.price_per_hour || 100000;
+                        const hourlyRate = Number(actualApt.rooms.price_per_hour) || 0;
+                        rentalCost = hourlyRate * durationHours;
                     }
                 } else {
-                    rentalCost = 100000; // Fallback
+                    rentalCost = 0;
                 }
+                
                 implicitRentalIncome += rentalCost;
             }
         });
@@ -467,45 +510,38 @@ export const AdminPaymentManager = () => {
         const getSplit = (subsetPayments: any[], subsetRentals: any[]) => {
             const subGross = subsetPayments.reduce((s, p) => s + (p.amount || 0), 0);
             let subImplicit = 0;
+            
+            // Calculate rental costs from appointments (implicit rentals)
             subsetPayments.forEach(p => {
                 const apt = p.appointments as any;
                 const actualApt = Array.isArray(apt) ? apt[0] : apt;
-                if (actualApt) {
-                    let cost = 0;
-                    if (actualApt.is_virtual) {
-                        cost = 10000;
-                    } else if (actualApt.rooms) {
-                        if (actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual')) {
-                            cost = 10000;
-                        } else {
-                            cost = actualApt.rooms.price_per_hour || 100000;
-                        }
-                    } else {
-                        cost = 100000;
-                    }
-                    subImplicit += cost;
-                }
+                subImplicit += getAppointmentRentalCost(actualApt);
             });
+            
+            // Direct rentals (room_rentals table)
             const subDirectRentals = subsetRentals.reduce((s, r) => s + (Number(r.total_price) || 0), 0);
 
-
-            // CORRECTED LOGIC (User Request Step 789):
-            // 1. Doctor Net = Gross Appointment Revenue - Room Costs (Implicit + Direct).
-            // 2. Arime Commission (Super Admin) = 10% of TOTAL RENTAL INCOME (not doctor income).
-            // 3. CorpoOriente Net = 90% of Rental Income.
+            // CICLO DE PAGOS CORRECTO:
+            // 1. Paciente paga la cita → ese dinero entra al admin (subGross)
+            // 2. El admin divide ese dinero en:
+            //    - Valor de la cita menos alquiler → para el médico (netDoctorPayout)
+            //    - Valor del alquiler del consultorio → para CorpoOriente (subImplicit)
+            // 3. Todos los lunes debe pagar:
+            //    - Al super admin (Arime Software): 10% del valor del alquiler de consultorios
+            //    - A los médicos: valor de las citas menos el alquiler
 
             const totalRentalIncome = subDirectRentals + subImplicit;
             const netDoctorPayout = Math.max(0, subGross - subImplicit);
-            const arimeCommission = Math.floor(totalRentalIncome * (commissionRate / 100));
+            const arimeCommission = Math.round(totalRentalIncome * (commissionRate / 100));
             const corpoOrienteNet = totalRentalIncome - arimeCommission;
 
             return {
-                grossApt: subGross,
-                netApt: netDoctorPayout, // Fully to doctor
-                arimeCommission: arimeCommission, // 10% of rentals
-                corpoOrienteNet: corpoOrienteNet, // 90% of rentals
-                totalRental: totalRentalIncome,
-                totalIncome: subGross + subDirectRentals
+                grossApt: subGross, // Total pagado por pacientes
+                netApt: netDoctorPayout, // Valor de citas menos alquiler (para médicos)
+                arimeCommission: arimeCommission, // 10% del total de alquileres (para Arime)
+                corpoOrienteNet: corpoOrienteNet, // 90% del total de alquileres (para CorpoOriente)
+                totalRental: totalRentalIncome, // Total de ingresos por alquileres
+                totalIncome: subGross + subDirectRentals // Ingresos totales (citas + alquileres directos)
             };
         };
 
@@ -565,26 +601,10 @@ export const AdminPaymentManager = () => {
         completedPayments.forEach(p => {
             const apt = p.appointments as any;
             const actualApt = Array.isArray(apt) ? apt[0] : apt;
-            if (actualApt) {
-                let cost = 0;
-                let isVirt = false;
-
-                if (actualApt.is_virtual) {
-                    cost = 10000;
-                    isVirt = true;
-                } else if (actualApt.rooms) {
-                    const isVirtualRoom = actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual');
-                    cost = isVirtualRoom ? 10000 : (actualApt.rooms.price_per_hour || 100000);
-                    isVirt = isVirtualRoom;
-                } else {
-                    cost = 100000;
-                    isVirt = false;
-                }
-
-                if (cost > 0) {
-                    if (isVirt) virtualIncome += cost;
-                    else physicalIncome += cost;
-                }
+            const cost = getAppointmentRentalCost(actualApt);
+            if (cost > 0) {
+                if (actualApt?.is_virtual) virtualIncome += cost;
+                else physicalIncome += cost;
             }
         });
 
@@ -595,26 +615,30 @@ export const AdminPaymentManager = () => {
             dailyRevenue,
             pendingTotal,
             pendingCount: pendingPayments.length + pendingRentals.length,
-            pendingTotal,
-            pendingCount: pendingPayments.length + pendingRentals.length,
-            totalGrossAptIncome: totalSplit.grossApt,
-            totalPatientIncome: totalSplit.netApt, // Doctor Payout
-            totalArimeCommission: totalSplit.arimeCommission, // 10% Rental
-            totalCorpoNet: totalSplit.corpoOrienteNet, // 90% Rental
-            totalRentalIncome: totalSplit.totalRental,
+            totalGrossAptIncome: totalSplit.grossApt, // Total pagado por pacientes (bruto)
+            totalPatientIncome: totalSplit.netApt, // Valor de citas menos alquiler (para médicos)
+            totalArimeCommission: totalSplit.arimeCommission, // 10% del total de alquileres (para Arime)
+            totalCorpoNet: totalSplit.corpoOrienteNet, // 90% del total de alquileres (para CorpoOriente)
+            totalRentalIncome: totalSplit.totalRental, // Total de ingresos por alquileres
             virtualIncome,
             physicalIncome,
             monthPaymentsCount: monthPayments.length,
-            monthRentalsCount: monthRentals.length
+            monthUniqueAppointments: new Set(monthPayments.map(p => p.appointment_id)).size,
+            monthRentalsCount: monthRentals.length,
+            monthImplicitRentalFromApts: monthSplit.totalRental - monthRentals.reduce((s, r) => s + (Number(r.total_price) || 0), 0)
         };
     }, [payments, rentals, commissionRate]);
 
     const getMethodLabel = (method: string) => {
-        switch (method) {
-            case 'cash': return 'Efectivo';
-            case 'card': return 'Tarjeta';
-            case 'transfer': return 'Transferencia';
-            default: return method || 'Otro';
+        switch (method?.toUpperCase()) {
+            case 'PSE': return 'PSE';
+            case 'TARJETA': 
+            case 'CARD': return 'Tarjeta';
+            case 'TRANSFER': 
+            case 'TRANSFERENCIA': return 'PSE'; // Migrar transferencias antiguas a PSE
+            case 'CASH': 
+            case 'EFECTIVO': return 'Tarjeta'; // Migrar efectivo antiguo a Tarjeta
+            default: return method || 'Tarjeta';
         }
     };
 
@@ -638,6 +662,47 @@ export const AdminPaymentManager = () => {
         name: getMethodLabel(method),
         value: amount
     }));
+
+    // Todas las entradas de dinero (pagos + alquileres) ordenadas por fecha
+    const allMovements = useMemo(() => {
+        const items: { id: string; date: string; dateSort: Date; concept: string; type: 'Cita' | 'Alquiler'; method: string; amount: number; status: string }[] = [];
+        const validPaymentStatus = ['paid', 'completed', 'confirmed'];
+        const validRentalStatus = ['paid', 'confirmed'];
+
+        payments.forEach((p: any) => {
+            if (!validPaymentStatus.includes(p.status)) return;
+            const apt = p.appointments;
+            const actualApt = Array.isArray(apt) ? apt[0] : apt;
+            const doctorName = actualApt?.doctor_id ? (doctorNames[actualApt.doctor_id] || 'Especialista') : 'Cita';
+            items.push({
+                id: `P-${p.id?.slice(0, 8) || ''}`,
+                date: format(parseISO(p.paid_at || p.created_at || new Date().toISOString()), "dd/MM/yyyy HH:mm", { locale: es }),
+                dateSort: new Date(p.paid_at || p.created_at || 0),
+                concept: `Cita - ${doctorName}`,
+                type: 'Cita',
+                method: getMethodLabel(p.payment_method || ''),
+                amount: Number(p.amount) || 0,
+                status: p.status
+            });
+        });
+
+        rentals.forEach((r: any) => {
+            if (!validRentalStatus.includes(r.status)) return;
+            const roomName = r.rooms?.name || r.renter_name || 'Alquiler';
+            items.push({
+                id: `A-${r.id?.slice(0, 8) || ''}`,
+                date: format(parseISO(r.start_time || r.created_at || new Date().toISOString()), "dd/MM/yyyy HH:mm", { locale: es }),
+                dateSort: new Date(r.start_time || r.created_at || 0),
+                concept: `Alquiler - ${roomName}`,
+                type: 'Alquiler',
+                method: '-',
+                amount: Number(r.total_price) || 0,
+                status: r.status
+            });
+        });
+
+        return items.sort((a, b) => b.dateSort.getTime() - a.dateSort.getTime());
+    }, [payments, rentals, doctorNames]);
 
     // === NEW LOGIC START ===
     // === NEW LOGIC START ===
@@ -694,6 +759,109 @@ export const AdminPaymentManager = () => {
         link.click();
         document.body.removeChild(link);
     };
+
+    const handleGenerateArimeInvoice = () => {
+        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+        
+        // Calcular alquileres de la semana
+        const weekPayments = payments.filter(p => {
+            const paymentDate = p.paid_at || p.created_at || new Date().toISOString();
+            return isWithinInterval(parseISO(paymentDate), { start: weekStart, end: weekEnd }) &&
+                   (p.status === 'paid' || p.status === 'completed' || p.status === 'confirmed');
+        });
+        
+        const weekRentals = rentals.filter(r => 
+            isWithinInterval(parseISO(r.start_time), { start: weekStart, end: weekEnd }) &&
+            (r.status === 'confirmed' || r.status === 'paid')
+        );
+
+        // Calcular alquileres implícitos de citas
+        const rentalDetails: any[] = [];
+        let totalImplicitRentals = 0;
+
+        weekPayments.forEach(p => {
+            const apt = p.appointments as any;
+            const actualApt = Array.isArray(apt) ? apt[0] : apt;
+            if (actualApt) {
+                let durationHours = 1;
+                if (actualApt.start_time && actualApt.end_time) {
+                    const start = new Date(actualApt.start_time);
+                    const end = new Date(actualApt.end_time);
+                    durationHours = Math.max(0.5, (end.getTime() - start.getTime()) / (1000 * 60 * 60));
+                }
+
+                let rentalCost = 0;
+                let roomType = '';
+                let roomName = '';
+
+                if (actualApt.is_virtual && actualApt.rooms) {
+                    rentalCost = Number(actualApt.rooms.price_per_session) || Number(actualApt.rooms.price_per_hour) || 0;
+                    roomType = 'Virtual';
+                    roomName = actualApt.rooms.name || 'Consulta Virtual';
+                } else if (actualApt.rooms) {
+                    if (actualApt.rooms.room_type === 'virtual' || actualApt.rooms.name?.toLowerCase().includes('virtual')) {
+                        rentalCost = Number(actualApt.rooms.price_per_session) || Number(actualApt.rooms.price_per_hour) || 0;
+                        roomType = 'Virtual';
+                        roomName = actualApt.rooms.name || 'Consulta Virtual';
+                    } else {
+                        const hourlyRate = Number(actualApt.rooms.price_per_hour) || 0;
+                        rentalCost = hourlyRate * durationHours;
+                        roomType = 'Físico';
+                        roomName = actualApt.rooms.name || 'Consultorio';
+                    }
+                } else {
+                    rentalCost = 0;
+                    roomType = 'Físico';
+                    roomName = 'Consultorio';
+                }
+
+                totalImplicitRentals += rentalCost;
+                rentalDetails.push({
+                    tipo: 'Cita',
+                    espacio: roomName,
+                    tipoEspacio: roomType,
+                    duracion: `${durationHours.toFixed(1)}h`,
+                    costo: rentalCost,
+                    fecha: format(parseISO(actualApt.start_time || new Date().toISOString()), 'dd/MM/yyyy HH:mm', { locale: es })
+                });
+            }
+        });
+
+        // Agregar alquileres directos
+        weekRentals.forEach(r => {
+            const roomType = r.rooms?.room_type === 'virtual' ? 'Virtual' : 'Físico';
+            rentalDetails.push({
+                tipo: 'Alquiler Directo',
+                espacio: r.rooms?.name || 'Salón',
+                tipoEspacio: roomType,
+                duracion: '-',
+                costo: Number(r.total_price) || 0,
+                fecha: format(parseISO(r.start_time), 'dd/MM/yyyy HH:mm', { locale: es })
+            });
+        });
+
+        const totalDirectRentals = weekRentals.reduce((sum, r) => sum + (Number(r.total_price) || 0), 0);
+        const totalRentalIncome = totalImplicitRentals + totalDirectRentals;
+        const arimeCommission = totalRentalIncome * (commissionRate / 100);
+        const corpoNet = totalRentalIncome - arimeCommission;
+
+        setArimeInvoiceData({
+            weekStart: format(weekStart, 'dd/MM/yyyy', { locale: es }),
+            weekEnd: format(weekEnd, 'dd/MM/yyyy', { locale: es }),
+            rentalDetails,
+            totalImplicitRentals,
+            totalDirectRentals,
+            totalRentalIncome,
+            commissionRate,
+            arimeCommission,
+            corpoNet,
+            generatedAt: format(new Date(), 'dd/MM/yyyy HH:mm', { locale: es })
+        });
+
+        setShowArimeInvoice(true);
+    };
+
     // === NEW LOGIC END ===
 
     return (
@@ -748,7 +916,9 @@ export const AdminPaymentManager = () => {
                     <CardContent>
                         <div className="text-3xl font-bold">${statistics.monthTotal.toLocaleString()}</div>
                         <p className="text-xs text-blue-100 mt-1">
-                            {statistics.monthPaymentsCount} citas + {statistics.monthRentalsCount} alquileres
+                            {statistics.monthUniqueAppointments} cita{statistics.monthUniqueAppointments !== 1 ? 's' : ''} pagada{statistics.monthUniqueAppointments !== 1 ? 's' : ''}
+                            {statistics.monthRentalsCount > 0 && ` · ${statistics.monthRentalsCount} alquiler{statistics.monthRentalsCount !== 1 ? 'es' : ''} directo${statistics.monthRentalsCount !== 1 ? 's' : ''}`}
+                            {statistics.monthImplicitRentalFromApts > 0 && ` · $${statistics.monthImplicitRentalFromApts.toLocaleString()} alq. consultorio en citas`}
                         </p>
                     </CardContent>
                 </Card>
@@ -803,7 +973,7 @@ export const AdminPaymentManager = () => {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-slate-900">${statistics.totalRentalIncome.toLocaleString()}</div>
-                        <p className="text-sm text-muted-foreground mt-1">Base para comisiones</p>
+                        <p className="text-sm text-muted-foreground mt-1">Consultorio en citas + alquileres directos · Base para comisiones</p>
                     </CardContent>
                 </Card>
             </div>
@@ -861,10 +1031,10 @@ export const AdminPaymentManager = () => {
                         <div className="text-3xl font-bold text-purple-900">${statistics.totalArimeCommission.toLocaleString()}</div>
                         <Button
                             className="w-full mt-4 bg-purple-600 hover:bg-purple-700 text-white shadow-md transition-all hover:scale-[1.02]"
-                            onClick={() => toast.success("Pago a Aríme Software procesado correctamente")}
+                            onClick={handleGenerateArimeInvoice}
                         >
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Generar pago hacia Arime
+                            <FileText className="h-4 w-4 mr-2" />
+                            Generar Factura de Cobro
                         </Button>
                         <p className="text-xs text-purple-600/80 mt-2 text-center flex items-center justify-center gap-1 bg-purple-50 py-1 rounded-md">
                             <Clock className="h-3 w-3" />
@@ -967,8 +1137,11 @@ export const AdminPaymentManager = () => {
             </div>
 
             {/* Tabs for Detailed Tables */}
-            <Tabs defaultValue="doctors" value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs defaultValue="movimientos" value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="bg-slate-100 p-1 rounded-lg">
+                    <TabsTrigger value="movimientos" className="gap-2">
+                        <List className="h-4 w-4" /> Movimientos
+                    </TabsTrigger>
                     <TabsTrigger value="doctors" className="gap-2">
                         <Stethoscope className="h-4 w-4" /> Pagos a Médicos
                     </TabsTrigger>
@@ -977,32 +1150,98 @@ export const AdminPaymentManager = () => {
                     </TabsTrigger>
                 </TabsList>
 
-
+                <TabsContent value="movimientos" className="mt-4">
+                    <Card className="border-slate-200 shadow-lg">
+                        <CardHeader className="bg-gradient-to-r from-slate-50 via-white to-teal-50/30 border-b border-slate-200">
+                            <CardTitle className="text-xl flex items-center gap-2 text-slate-900">
+                                <List className="h-5 w-5 text-teal-600" />
+                                Todas las Entradas de Dinero
+                            </CardTitle>
+                            <CardDescription>
+                                Historial completo de pagos de citas y alquileres ordenado por fecha
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                            {loading ? (
+                                <div className="flex items-center justify-center py-20 text-muted-foreground">
+                                    <Clock className="mr-3 h-6 w-6 animate-spin" />
+                                    <span className="text-lg">Cargando movimientos...</span>
+                                </div>
+                            ) : allMovements.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                                    <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                                        <DollarSign className="h-8 w-8 text-slate-300" />
+                                    </div>
+                                    <h3 className="text-lg font-semibold text-slate-700">Sin movimientos registrados</h3>
+                                    <p className="text-sm text-slate-500 max-w-sm mt-2">
+                                        Los pagos de citas y alquileres aparecerán aquí cuando se procesen.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="border border-slate-200 rounded-lg overflow-hidden overflow-x-auto">
+                                    <Table>
+                                        <TableHeader className="bg-slate-50">
+                                            <TableRow>
+                                                <TableHead className="font-semibold">ID</TableHead>
+                                                <TableHead className="font-semibold">Fecha</TableHead>
+                                                <TableHead className="font-semibold">Concepto</TableHead>
+                                                <TableHead className="font-semibold">Tipo</TableHead>
+                                                <TableHead className="font-semibold">Método</TableHead>
+                                                <TableHead className="text-right font-semibold">Monto</TableHead>
+                                                <TableHead className="font-semibold">Estado</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {allMovements.map((mov) => (
+                                                <TableRow key={mov.id} className="hover:bg-slate-50/50">
+                                                    <TableCell className="font-mono text-xs text-slate-600">{mov.id}</TableCell>
+                                                    <TableCell className="text-slate-700">{mov.date}</TableCell>
+                                                    <TableCell className="font-medium text-slate-800">{mov.concept}</TableCell>
+                                                    <TableCell>
+                                                        <Badge variant="outline" className={mov.type === 'Alquiler' ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-teal-50 text-teal-700 border-teal-200'}>
+                                                            {mov.type}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-slate-600">{mov.method}</TableCell>
+                                                    <TableCell className="text-right font-bold text-teal-700">
+                                                        ${mov.amount.toLocaleString('es-CO')}
+                                                    </TableCell>
+                                                    <TableCell>{getStatusBadge(mov.status)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
                 <TabsContent value="doctors" className="mt-4">
                     <Card className="border-slate-200 shadow-lg">
-                        <CardHeader className="bg-gradient-to-r from-indigo-50 via-purple-50 to-white border-b border-indigo-100">
+                        <CardHeader className="bg-gradient-to-r from-teal-50 via-emerald-50 to-white border-b border-teal-100">
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                    <CardTitle className="text-xl flex items-center gap-2 text-indigo-900">
-                                        <Stethoscope className="h-5 w-5 text-indigo-600" />
-                                        Gestión de Pagos a Médicos
+                                    <CardTitle className="text-xl flex items-center gap-2 text-teal-900">
+                                        <Stethoscope className="h-5 w-5 text-teal-600" />
+                                        Liquidación Semanal a Médicos
                                     </CardTitle>
-                                    <CardDescription className="mt-1">
-                                        Genera y procesa los cortes semanales (Lunes)
+                                    <CardDescription className="mt-1 text-slate-600">
+                                        Cortes semanales cada Lunes: <span className="font-medium text-teal-700">Valor de citas - Alquiler de consultorio</span>
                                     </CardDescription>
                                 </div>
-                                <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-indigo-100 shadow-sm">
+                                <div className="flex items-center gap-2 bg-white p-1.5 rounded-lg border border-teal-200 shadow-sm">
                                     <Button
                                         variant="ghost"
                                         size="icon"
                                         onClick={() => setSelectedWeek(subDays(selectedWeek, 7))}
+                                        className="hover:bg-teal-50"
                                     >
                                         <ChevronRight className="h-4 w-4 rotate-180" />
                                     </Button>
-                                    <div className="flex items-center gap-2 px-2 text-sm font-medium">
-                                        <Calendar className="h-4 w-4 text-indigo-500" />
-                                        <span>
+                                    <div className="flex items-center gap-2 px-3 text-sm font-medium">
+                                        <Calendar className="h-4 w-4 text-teal-600" />
+                                        <span className="text-slate-700">
                                             Semana: {format(startOfWeek(selectedWeek, { weekStartsOn: 1 }), 'd MMM', { locale: es })} - {format(endOfWeek(selectedWeek, { weekStartsOn: 1 }), 'd MMM', { locale: es })}
                                         </span>
                                     </div>
@@ -1011,6 +1250,7 @@ export const AdminPaymentManager = () => {
                                         size="icon"
                                         onClick={() => setSelectedWeek(addDays(selectedWeek, 7))}
                                         disabled={selectedWeek > new Date()}
+                                        className="hover:bg-teal-50"
                                     >
                                         <ChevronRight className="h-4 w-4" />
                                     </Button>
@@ -1018,18 +1258,57 @@ export const AdminPaymentManager = () => {
                             </div>
                         </CardHeader>
                         <CardContent className="p-6">
+                            {/* Explicación del ciclo de pagos */}
+                            <div className="mb-6 bg-gradient-to-r from-slate-50 to-teal-50/30 rounded-xl p-4 border border-slate-200">
+                                <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4 text-teal-600" />
+                                    Ciclo de Pagos
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                                    <div className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                                        <div className="h-5 w-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-[10px]">1</div>
+                                        <div>
+                                            <p className="font-medium text-slate-700">Paciente paga</p>
+                                            <p className="text-slate-500">El valor total de la cita</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                                        <div className="h-5 w-5 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-[10px]">2</div>
+                                        <div>
+                                            <p className="font-medium text-slate-700">Se descuenta alquiler</p>
+                                            <p className="text-slate-500">Virtual: $10,000 | Físico: tarifa/hora</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-start gap-2 bg-white p-2.5 rounded-lg border border-slate-100">
+                                        <div className="h-5 w-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-[10px]">3</div>
+                                        <div>
+                                            <p className="font-medium text-slate-700">Médico recibe</p>
+                                            <p className="text-slate-500">Valor cita - alquiler (cada Lunes)</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                             {/* Actions Bar */}
-                            <div className="flex justify-between items-center mb-6">
-                                <div className="flex items-center gap-4">
-                                    <div className="text-sm text-slate-500">
-                                        Estado del corte: <Badge variant={weeklyPayouts.length > 0 ? 'secondary' : 'outline'}>
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <div className="text-sm text-slate-600 flex items-center gap-2">
+                                        <span className="text-slate-500">Estado:</span>
+                                        <Badge 
+                                            variant={weeklyPayouts.length > 0 ? 'secondary' : 'outline'}
+                                            className={weeklyPayouts.length > 0 
+                                                ? weeklyPayouts.some(p => p.status === 'pending') 
+                                                    ? 'bg-amber-100 text-amber-700 border-amber-200' 
+                                                    : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+                                                : 'bg-slate-100 text-slate-600'
+                                            }
+                                        >
                                             {weeklyPayouts.length > 0 ? (
                                                 weeklyPayouts.some(p => p.status === 'pending') ? 'Pendiente de Pago' : 'Procesado'
                                             ) : 'No generado'}
                                         </Badge>
                                     </div>
                                     {!isMonday && (
-                                        <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1 rounded-md text-xs font-medium border border-amber-200">
+                                        <div className="flex items-center gap-1.5 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-200">
                                             <AlertCircle className="h-3.5 w-3.5" />
                                             Pagos habilitados solo los Lunes
                                         </div>
@@ -1050,7 +1329,7 @@ export const AdminPaymentManager = () => {
                                     <Button
                                         onClick={() => setShowGenerateConfirm(true)}
                                         disabled={generatingPayouts || weeklyPayouts.length > 0}
-                                        className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                                        className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white shadow-md"
                                     >
                                         {generatingPayouts ? (
                                             <>
@@ -1068,7 +1347,7 @@ export const AdminPaymentManager = () => {
                                         <Button
                                             onClick={() => setShowPayAllConfirm(true)}
                                             disabled={!isMonday}
-                                            className={`${!isMonday ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} `}
+                                            className={`${!isMonday ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-md'}`}
                                             title={!isMonday ? 'El pago masivo solo está disponible los lunes' : 'Pagar todo'}
                                         >
                                             <CheckCircle2 className="mr-2 h-4 w-4" />
@@ -1169,54 +1448,92 @@ export const AdminPaymentManager = () => {
                                 </div>
                             ) : doctorPayouts.length > 0 ? (
                                 <div className="space-y-4">
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-start gap-3">
-                                        <Clock className="h-5 w-5 text-blue-600 mt-0.5" />
+                                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-4 flex items-start gap-3">
+                                        <Clock className="h-5 w-5 text-teal-600 mt-0.5" />
                                         <div>
-                                            <h4 className="text-sm font-semibold text-blue-800">Vista Previa - Corte no generado</h4>
-                                            <p className="text-xs text-blue-600 mt-1">
-                                                Estos valores se actualizan en tiempo real según las citas finalizadas.
-                                                Para congelar los montos y proceder al pago, haga clic en "Generar Corte".
+                                            <h4 className="text-sm font-semibold text-teal-800">Vista Previa - Corte no generado</h4>
+                                            <p className="text-xs text-teal-600 mt-1">
+                                                Estos valores se actualizan en tiempo real según las citas pagadas de la semana.
+                                                Para congelar los montos y proceder al pago, haga clic en <strong>"Generar Corte"</strong>.
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="border border-slate-200 rounded-lg overflow-hidden opacity-75 grayscale-[30%]">
+                                    
+                                    {/* Resumen de totales */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                        <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                                            <p className="text-xs text-blue-600 font-medium">Total Citas</p>
+                                            <p className="text-xl font-bold text-blue-700">
+                                                {doctorPayouts.reduce((sum, p) => sum + p.total_appointments, 0)}
+                                            </p>
+                                        </div>
+                                        <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
+                                            <p className="text-xs text-slate-600 font-medium">Honorarios Brutos</p>
+                                            <p className="text-xl font-bold text-slate-700">
+                                                ${doctorPayouts.reduce((sum, p) => sum + p.appointment_revenue, 0).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                                            <p className="text-xs text-amber-600 font-medium">Alquileres</p>
+                                            <p className="text-xl font-bold text-amber-700">
+                                                -${doctorPayouts.reduce((sum, p) => sum + p.rental_costs, 0).toLocaleString()}
+                                            </p>
+                                        </div>
+                                        <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                                            <p className="text-xs text-emerald-600 font-medium">Neto a Pagar</p>
+                                            <p className="text-xl font-bold text-emerald-700">
+                                                ${doctorPayouts.reduce((sum, p) => sum + p.net_payout, 0).toLocaleString()}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="border border-slate-200 rounded-xl overflow-hidden">
                                         <Table>
                                             <TableHeader className="bg-slate-50">
                                                 <TableRow>
-                                                    <TableHead>Médico</TableHead>
-                                                    <TableHead className="text-center">Citas</TableHead>
-                                                    <TableHead className="text-right">Honorarios</TableHead>
-                                                    <TableHead className="text-right">Deducciones</TableHead>
-                                                    <TableHead className="text-right">Neto Estimado</TableHead>
+                                                    <TableHead className="font-semibold">Médico</TableHead>
+                                                    <TableHead className="text-center font-semibold">Citas</TableHead>
+                                                    <TableHead className="text-right font-semibold">Honorarios</TableHead>
+                                                    <TableHead className="text-right font-semibold">Alquiler Consultorio</TableHead>
+                                                    <TableHead className="text-right font-semibold">Neto Estimado</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {doctorPayouts.map((payout) => (
-                                                    <TableRow key={payout.doctor_id}>
+                                                {doctorPayouts.filter(p => p.total_appointments > 0).map((payout) => (
+                                                    <TableRow key={payout.doctor_id} className="hover:bg-slate-50/50">
                                                         <TableCell className="font-medium">
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-700 font-bold text-xs">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-teal-100 to-teal-50 flex items-center justify-center text-teal-700 font-bold text-sm border border-teal-200">
                                                                     {(payout.doctor_name || 'Dr').substring(0, 2).toUpperCase()}
                                                                 </div>
-                                                                {payout.doctor_name}
+                                                                <span className="text-slate-800">{payout.doctor_name}</span>
                                                             </div>
                                                         </TableCell>
                                                         <TableCell className="text-center">
-                                                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">
+                                                            <Badge variant="secondary" className="bg-teal-100 text-teal-700 font-bold">
                                                                 {payout.total_appointments}
                                                             </Badge>
                                                         </TableCell>
-                                                        <TableCell className="text-right font-medium text-slate-600">
+                                                        <TableCell className="text-right font-medium text-slate-700">
                                                             ${payout.appointment_revenue.toLocaleString()}
                                                         </TableCell>
-                                                        <TableCell className="text-right text-red-600">
+                                                        <TableCell className="text-right text-amber-600 font-medium">
                                                             -${payout.rental_costs.toLocaleString()}
                                                         </TableCell>
-                                                        <TableCell className="text-right font-bold text-slate-700 text-lg">
-                                                            ${payout.net_payout.toLocaleString()}
+                                                        <TableCell className="text-right">
+                                                            <span className="text-lg font-bold text-emerald-600">
+                                                                ${payout.net_payout.toLocaleString()}
+                                                            </span>
                                                         </TableCell>
                                                     </TableRow>
                                                 ))}
+                                                {doctorPayouts.filter(p => p.total_appointments > 0).length === 0 && (
+                                                    <TableRow>
+                                                        <TableCell colSpan={5} className="text-center py-8 text-slate-500">
+                                                            No hay citas pagadas en esta semana
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
                                             </TableBody>
                                         </Table>
                                     </div>
@@ -1514,6 +1831,163 @@ export const AdminPaymentManager = () => {
                     </DialogFooter>
                 </DialogContent>
             </Dialog >
+
+            {/* Arime Invoice Dialog */}
+            <Dialog open={showArimeInvoice} onOpenChange={setShowArimeInvoice}>
+                <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-2xl text-purple-900">
+                            <FileText className="h-6 w-6 text-purple-600" />
+                            Factura de Cobro - Aríme Software
+                        </DialogTitle>
+                        <DialogDescription>
+                            Comisión por alquileres de consultorios y salones - Semana del {arimeInvoiceData?.weekStart} al {arimeInvoiceData?.weekEnd}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {arimeInvoiceData && (
+                        <div className="space-y-6 pt-4">
+                            {/* Header Info */}
+                            <div className="grid grid-cols-2 gap-4 p-4 bg-purple-50 rounded-xl border border-purple-100">
+                                <div>
+                                    <div className="text-xs text-purple-600 uppercase tracking-wider mb-1">Período</div>
+                                    <div className="text-sm font-bold text-purple-900">
+                                        {arimeInvoiceData.weekStart} - {arimeInvoiceData.weekEnd}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-purple-600 uppercase tracking-wider mb-1">Fecha de Generación</div>
+                                    <div className="text-sm font-semibold text-purple-700">{arimeInvoiceData.generatedAt}</div>
+                                </div>
+                            </div>
+
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                                    <div className="text-xs text-slate-500 uppercase tracking-wider mb-1">Total Alquileres</div>
+                                    <div className="text-2xl font-bold text-slate-900">${arimeInvoiceData.totalRentalIncome.toLocaleString()}</div>
+                                    <div className="text-xs text-slate-500 mt-1">
+                                        Implícitos: ${arimeInvoiceData.totalImplicitRentals.toLocaleString()}<br />
+                                        Directos: ${arimeInvoiceData.totalDirectRentals.toLocaleString()}
+                                    </div>
+                                </div>
+                                <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
+                                    <div className="text-xs text-purple-600 uppercase tracking-wider mb-1">Comisión ({arimeInvoiceData.commissionRate}%)</div>
+                                    <div className="text-2xl font-bold text-purple-900">${arimeInvoiceData.arimeCommission.toLocaleString()}</div>
+                                    <div className="text-xs text-purple-600 mt-1">A favor de Aríme Software</div>
+                                </div>
+                                <div className="p-4 bg-teal-50 rounded-xl border border-teal-200">
+                                    <div className="text-xs text-teal-600 uppercase tracking-wider mb-1">CorpoOriente Neto</div>
+                                    <div className="text-2xl font-bold text-teal-700">${arimeInvoiceData.corpoNet.toLocaleString()}</div>
+                                    <div className="text-xs text-teal-600 mt-1">{100 - arimeInvoiceData.commissionRate}% del total</div>
+                                </div>
+                            </div>
+
+                            {/* Rental Details Table */}
+                            <div className="border rounded-xl overflow-hidden">
+                                <Table>
+                                    <TableHeader className="bg-slate-50">
+                                        <TableRow>
+                                            <TableHead className="text-xs">Tipo</TableHead>
+                                            <TableHead className="text-xs">Espacio</TableHead>
+                                            <TableHead className="text-xs">Tipo Espacio</TableHead>
+                                            <TableHead className="text-xs">Duración</TableHead>
+                                            <TableHead className="text-xs text-right">Costo</TableHead>
+                                            <TableHead className="text-xs">Fecha</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {arimeInvoiceData.rentalDetails.map((detail: any, idx: number) => (
+                                            <TableRow key={idx}>
+                                                <TableCell className="text-xs">
+                                                    <Badge variant="outline" className="bg-slate-50 text-slate-700">
+                                                        {detail.tipo}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-xs font-medium">{detail.espacio}</TableCell>
+                                                <TableCell className="text-xs">
+                                                    <Badge variant={detail.tipoEspacio === 'Virtual' ? 'secondary' : 'default'}>
+                                                        {detail.tipoEspacio}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-xs">{detail.duracion}</TableCell>
+                                                <TableCell className="text-xs text-right font-bold">
+                                                    ${detail.costo.toLocaleString()}
+                                                </TableCell>
+                                                <TableCell className="text-xs text-slate-500">{detail.fecha}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+
+                            {/* Total Summary */}
+                            <div className="p-4 bg-gradient-to-r from-purple-50 to-purple-100 rounded-xl border-2 border-purple-200">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <div className="text-sm text-purple-700 font-semibold">Total a Cobrar a CorpoOriente</div>
+                                        <div className="text-xs text-purple-600 mt-1">Comisión del {arimeInvoiceData.commissionRate}% sobre alquileres</div>
+                                    </div>
+                                    <div className="text-3xl font-bold text-purple-900">
+                                        ${arimeInvoiceData.arimeCommission.toLocaleString()}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Notes */}
+                            <div className="p-4 bg-amber-50 rounded-lg border border-amber-100 flex gap-3 items-start">
+                                <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                                <div className="text-xs text-amber-800 leading-relaxed">
+                                    <p className="font-bold mb-1">Nota importante:</p>
+                                    Esta factura incluye todos los alquileres de consultorios físicos y virtuales, así como salones, correspondientes a la semana indicada. El monto corresponde al {arimeInvoiceData.commissionRate}% del total de ingresos por alquileres.
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <DialogFooter className="gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                if (arimeInvoiceData) {
+                                    // Generar CSV de la factura
+                                    const csvHeaders = ["Tipo", "Espacio", "Tipo Espacio", "Duración", "Costo", "Fecha"];
+                                    const csvRows = arimeInvoiceData.rentalDetails.map((d: any) => [
+                                        d.tipo,
+                                        d.espacio,
+                                        d.tipoEspacio,
+                                        d.duracion,
+                                        d.costo,
+                                        d.fecha
+                                    ]);
+                                    const csvContent = [
+                                        csvHeaders.join(','),
+                                        ...csvRows.map((row: any[]) => row.join(',')),
+                                        '',
+                                        `Total Alquileres,${arimeInvoiceData.totalRentalIncome}`,
+                                        `Comisión (${arimeInvoiceData.commissionRate}%),${arimeInvoiceData.arimeCommission}`,
+                                        `CorpoOriente Neto,${arimeInvoiceData.corpoNet}`
+                                    ].join('\n');
+
+                                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                    const url = URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.setAttribute('href', url);
+                                    link.setAttribute('download', `factura_arime_${arimeInvoiceData.weekStart.replace(/\//g, '-')}.csv`);
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    toast.success('Factura descargada exitosamente');
+                                }
+                            }}
+                        >
+                            <Download className="h-4 w-4 mr-2" />
+                            Descargar CSV
+                        </Button>
+                        <Button onClick={() => setShowArimeInvoice(false)}>Cerrar</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div >
     );
 };

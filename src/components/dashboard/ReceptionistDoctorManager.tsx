@@ -100,7 +100,7 @@ export const ReceptionistDoctorManager = () => {
 
         const { data: appointments, error } = await supabase
             .from('appointments')
-            .select('id, start_time, end_time, status, patient_id')
+            .select('id, start_time, end_time, status, patient_id, external_patient_name')
             .eq('doctor_id', doctorId)
             .gte('start_time', startOfDay)
             .lte('start_time', endOfDay)
@@ -128,10 +128,11 @@ export const ReceptionistDoctorManager = () => {
         const appointmentsWithPatients = appointments?.map(apt => {
             const patientProfile = patientProfiles?.find(p => p.id === apt.patient_id);
             const patientUser = patientUsers?.find(u => u.user_id === patientProfile?.user_id);
+            const patientName = apt.external_patient_name || patientUser?.full_name || 'Paciente';
 
             return {
                 ...apt,
-                patient_name: patientUser?.full_name || 'Paciente'
+                patient_name: patientName
             };
         }) || [];
 
